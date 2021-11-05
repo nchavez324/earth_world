@@ -1,5 +1,5 @@
-#include "pandaFramework.h"
-#include "pandaSystem.h"
+#include "panda3d/pandaFramework.h"
+#include "panda3d/pandaSystem.h"
 
 int main(int argc, char *argv[]) {
   // Open a new window framework

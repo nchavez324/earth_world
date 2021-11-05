@@ -3,5 +3,9 @@
   "editor.detectIndentation": false,
   "editor.rulers": [ 100 ],
   "editor.insertSpaces": true,
-  "editor.codeLens": false
-  }
+  "editor.codeLens": false,
+
+  "C_Cpp.default.includePath": [
+    "/usr/include/eigen3",
+  ]
+}
