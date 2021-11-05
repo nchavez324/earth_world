@@ -1,7 +1,22 @@
 Import('debug')
 
-PANDA_INCLUDE = '/usr/include'
-PANDA_LIBRARY = '/usr/lib/x86_64-linux-gnu/panda3d'
+PANDA_INCLUDES = [
+  '/usr/include',
+  '/usr/include/eigen3',
+]
+PANDA_LIBRARY_PATHS = [
+  '/usr/lib/x86_64-linux-gnu/panda3d',
+]
+PANDA_LIBRARIES = [
+  'libp3framework',
+  'libpanda',
+  'libpandafx',
+  'libpandaexpress',
+  'libp3dtoolconfig',
+  'libp3dtool',
+  'libp3direct',
+  'pthread',
+]
 
 CCFLAGS_DEBUG = [
   '-Og',
@@ -17,21 +32,33 @@ env.Program('main',
     CCFLAGS=[
         '-fPIC',
         '-std=gnu++11',
+        '-pedantic',
+        '-Wall',
+        '-Wextra',
+        '-Wcast-align',
+        '-Wcast-qual',
+        '-Wctor-dtor-privacy',
+        '-Wdisabled-optimization',
+        '-Wformat=2',
+        '-Winit-self',
+        '-Wlogical-op',
+        '-Wmissing-declarations',
+        '-Wmissing-include-dirs',
+        '-Wnoexcept',
+        '-Wold-style-cast',
+        '-Woverloaded-virtual',
+        '-Wredundant-decls',
+        '-Wshadow',
+        '-Wsign-conversion',
+        '-Wsign-promo',
+        '-Wstrict-null-sentinel',
+        '-Wstrict-overflow=5',
+        '-Wswitch-default',
+        '-Wundef',
+        '-Werror',
+        '-Wno-unused',
     ] + (CCFLAGS_DEBUG if debug else CCFLAGS_RELEASE),
-    CPPPATH=[
-        PANDA_INCLUDE,
-        '/usr/include/eigen3',
-    ],
-    LIBPATH=[
-        PANDA_LIBRARY,
-    ],
-    LIBS=[
-        'libp3framework',
-        'libpanda',
-        'libpandafx',
-        'libpandaexpress',
-        'libp3dtoolconfig',
-        'libp3dtool',
-        'libp3direct',
-    ]
+    CPPPATH=PANDA_INCLUDES,
+    LIBPATH=PANDA_LIBRARY_PATHS,
+    LIBS=PANDA_LIBRARIES,
 )
