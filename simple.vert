@@ -5,7 +5,7 @@ uniform mat4 p3d_ModelViewProjectionMatrix;
 
 // Vertex inputs
 in vec4 p3d_Vertex;
-in vec3 p3d_Normal;
+// in vec3 p3d_Normal;
 in vec4 p3d_Color;
 
 // Output to fragment shader

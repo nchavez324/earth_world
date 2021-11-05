@@ -1,59 +1,112 @@
+#include "panda3d/computeNode.h"
 #include "panda3d/geomTriangles.h"
 #include "panda3d/shader.h"
 #include "panda3d/pandaFramework.h"
 #include "panda3d/pandaSystem.h"
 
+void generateFace(
+  PT(GeomTriangles) triangles,
+  GeomVertexWriter& vertices,
+  GeomVertexWriter& colors,
+  int verticesPerEdge,
+  const LVecBase3& normal,
+  int vertexOffset);
+const PT(GeomNode) generateGlobeNode(int verticesPerEdge);
+
+void generateFace(
+  PT(GeomTriangles) triangles,
+  GeomVertexWriter& vertices,
+  GeomVertexWriter& colors,
+  int verticesPerEdge,
+  const LVecBase3& normal,
+  int vertexOffset
+) {
+  float patchSize = 2.0 / (verticesPerEdge - 1);
+  LVecBase3 axis1 = LVecBase3(normal.get_y(), normal.get_z(), normal.get_x());
+  LVecBase3 axis2 = axis1.cross(normal);
+  LVecBase3 faceOrigin = normal - axis1 - axis2;
+
+  for (int tick1 = 0; tick1 < verticesPerEdge; tick1++) {
+    for (int tick2 = 0; tick2 < verticesPerEdge; tick2++) {
+      int vertexIndex = (tick1 * verticesPerEdge) + tick2;
+      LVecBase3 point = faceOrigin + (patchSize * tick1 * axis1) + (patchSize * tick2 * axis2);
+      point.normalize();
+      vertices.add_data3(point);
+      colors.add_data4(
+        static_cast<float>(tick1) / static_cast<float>(verticesPerEdge),
+        static_cast<float>(tick2) / static_cast<float>(verticesPerEdge),
+        ((tick1 + tick2) % 2 == 0) ? 1 : 0,
+        1);
+
+      if (tick1 < verticesPerEdge - 1 && tick2 < verticesPerEdge - 1) {
+        triangles->add_vertices(
+          vertexOffset + vertexIndex + 0,
+          vertexOffset + vertexIndex + 1,
+          vertexOffset + vertexIndex + verticesPerEdge);
+        triangles->add_vertices(
+          vertexOffset + vertexIndex + verticesPerEdge,
+          vertexOffset + vertexIndex + 1,
+          vertexOffset + vertexIndex + verticesPerEdge + 1);
+      }
+    }
+  }
+}
+
+const PT(GeomNode) generateGlobeNode(int verticesPerEdge) {
+  verticesPerEdge = std::max(verticesPerEdge, 2);
+  int verticesPerFace = verticesPerEdge * verticesPerEdge;
+  int vertexCount = verticesPerFace * 6;
+  const PT(GeomTriangles) triangles = new GeomTriangles(Geom::UH_static);
+  const PT(GeomVertexData) vdata = new GeomVertexData(
+      "Globe",
+      GeomVertexFormat::get_v3c4(),
+      Geom::UH_static);
+  vdata->set_num_rows(vertexCount);
+  GeomVertexWriter vertices(vdata, "vertex");
+  GeomVertexWriter colors(vdata, "color");
+
+  generateFace(triangles, vertices, colors, verticesPerEdge, LVecBase3(+1, 0, 0), 0 * verticesPerFace);
+  generateFace(triangles, vertices, colors, verticesPerEdge, LVecBase3(-1, 0, 0), 1 * verticesPerFace);
+  generateFace(triangles, vertices, colors, verticesPerEdge, LVecBase3(0, +1, 0), 2 * verticesPerFace);
+  generateFace(triangles, vertices, colors, verticesPerEdge, LVecBase3(0, -1, 0), 3 * verticesPerFace);
+  generateFace(triangles, vertices, colors, verticesPerEdge, LVecBase3(0, 0, +1), 4 * verticesPerFace);
+  generateFace(triangles, vertices, colors, verticesPerEdge, LVecBase3(0, 0, -1), 5 * verticesPerFace);
+  triangles->close_primitive();
+
+  const PT(Geom) geom = new Geom(vdata);
+  geom->add_primitive(triangles);
+
+  const PT(GeomNode) node = new GeomNode("Globe");
+  node->add_geom(geom);
+
+  return node;
+}
+
 int main(int argc, char *argv[]) {
   PandaFramework framework;
   framework.open_framework(argc, argv);
   framework.set_window_title("My Panda3D Window");
-  WindowFramework *window = framework.open_window();
+  WindowFramework * const window = framework.open_window();
 
-  PT(GeomVertexData) vdata;
-  vdata = new GeomVertexData("name", GeomVertexFormat::get_v3n3c4(), Geom::UH_static);
-  vdata->set_num_rows(4);
-  GeomVertexWriter vertices(vdata, "vertex");
-  GeomVertexWriter normals(vdata, "normal");
-  GeomVertexWriter colors(vdata, "color");
+  NodePath globe = window->get_render().attach_new_node(
+      generateGlobeNode(/* verticesPerEdge= */ 5));
+  // const PT(Shader) materialShader = Shader::load(
+  //     Shader::SL_GLSL,
+  //     "../../simple.vert",
+  //     "../../simple.frag");
+  // globe.set_shader(materialShader);
 
-  vertices.add_data3(-20, -20, 0);
-  vertices.add_data3(20, -20, 0);
-  vertices.add_data3(-20, 20, 0);
-  vertices.add_data3(20, 20, 0);
+  // const PT(Shader) computeShader = Shader::load_compute(
+  //   Shader::SL_GLSL,
+  //   "../../compute.glsl");
+  // const PT(ComputeNode) computeNode = new ComputeNode("compute");
+  // computeNode->add_dispatch(512 / 16, 512 / 16, 1);
+  // NodePath compute = window->get_render().attach_new_node(computeNode);
+  // compute.set_shader(computeShader);
+  // compute.set_shader_input("fromTex", myTex1);
+  // compute.set_shader_input("toTex", myTex2);
 
-  normals.add_data3(0, 0, 1);
-  normals.add_data3(0, 0, 1);
-  normals.add_data3(0, 0, 1);
-  normals.add_data3(0, 0, 1);
-
-  colors.add_data4(1, 0, 0, 1);
-  colors.add_data4(1, 1, 0, 1);
-  colors.add_data4(0, 1, 0, 1);
-  colors.add_data4(0, 0, 1, 1);
-
-  PT(GeomTriangles) primitive;
-  primitive = new GeomTriangles(Geom::UH_static);
-  primitive->add_vertices(0, 1, 2);
-  primitive->add_vertices(2, 1, 3);
-  primitive->close_primitive();
-
-  PT(Geom) geom;
-  geom = new Geom(vdata);
-  geom->add_primitive(primitive);
-
-  PT(GeomNode) node;
-  node = new GeomNode("gnode");
-  node->add_geom(geom);
-
-  NodePath geomScene = window->get_render().attach_new_node(node);
-  PT(Shader) shader = Shader::load(Shader::SL_GLSL, "simple.vert", "simple.frag");
-  geomScene.set_shader(shader);
-  geomScene.set_scale(1, 1, 1);
-  geomScene.set_pos(0, 0, 0);
-
-  NodePath camera = window->get_camera_group();
-  camera.set_pos(0, 0, 80);
-  camera.set_hpr(0, -90, 0);
+  window->setup_trackball();
 
   framework.main_loop();
   framework.close_framework();

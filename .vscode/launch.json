@@ -7,7 +7,7 @@
     "program": "${workspaceFolder}/build/debug/main",
     "args": [],
     "stopAtEntry": false,
-    "cwd": "${fileDirname}",
+    "cwd": "${workspaceFolder}",
     "environment": [],
     "externalConsole": false,
     "MIMode": "gdb",
