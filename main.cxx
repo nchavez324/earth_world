@@ -86,6 +86,7 @@ NodePath generateGlobeNode(GraphicsWindow *window, int verticesPerEdge) {
   compute.set_shader(computeShader);
   compute.set_shader_input("VerticesPerEdge", LVecBase2i(verticesPerEdge, 0));
   compute.set_shader_input("VertexBuffer", vertexBuffer);
+  compute.set_shader_input("HeightmapTex", texture);
   CPT<ShaderAttrib> attributes =
       DCAST(ShaderAttrib, compute.get_attrib(ShaderAttrib::get_class_type()));
 
@@ -145,7 +146,7 @@ int main(int argc, char *argv[]) {
   axes.set_scale(10);
 
   NodePath globe = generateGlobeNode(window->get_graphics_window(),
-                                     /* verticesPerEdge= */ 10);
+                                     /* verticesPerEdge= */ 250);
   globe.reparent_to(window->get_render());
   globe.set_scale(5);
 
