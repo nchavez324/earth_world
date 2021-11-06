@@ -1,23 +1,44 @@
 #version 430
 
-// Set the number of invocations in the work group.
-// In this case, we operate on the image in 16x16 pixel tiles.
-layout (local_size_x = 16, local_size_y = 16) in;
+layout (local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 
-// Declare the texture inputs
-uniform readonly image2D fromTex;
-uniform writeonly image2D toTex;
+layout(std430) buffer VertexBuffer {
+  vec3 positions[];
+};
+uniform uint VerticesPerEdge;
 
 void main() {
-  // Acquire the coordinates to the texel we are to process.
-  ivec2 texelCoords = ivec2(gl_GlobalInvocationID.xy);
+  if (gl_GlobalInvocationID.x >= VerticesPerEdge ||
+      gl_GlobalInvocationID.y >= VerticesPerEdge ||
+      gl_GlobalInvocationID.z >= 6) {
+    return;
+  }
+  vec3 normal = vec3(0, 0, 0);
+  switch (gl_GlobalInvocationID.z) {
+  case 0: normal = vec3(+1, 0, 0); break;
+  case 1: normal = vec3(-1, 0, 0); break;
+  case 2: normal = vec3(0, +1, 0); break;
+  case 3: normal = vec3(0, -1, 0); break;
+  case 4: normal = vec3(0, 0, -1); break;
+  case 5: normal = vec3(0, 0, +1); break;
+  }
+  vec3 axis1 = vec3(normal.y, normal.z, normal.x);
+  vec3 axis2 = cross(axis1, normal);
+  vec3 faceOrigin = normal - axis1 - axis2;
 
-  // Read the pixel from the first texture.
-  vec4 pixel = imageLoad(fromTex, texelCoords);
-
-  // Swap the red and green channels.
-  pixel.rg = pixel.gr;
-
-  // Now write the modified pixel to the second texture.
-  imageStore(toTex, texelCoords, pixel);
+  uint vertexIndex =
+      (VerticesPerEdge * VerticesPerEdge * gl_GlobalInvocationID.z) +
+      (VerticesPerEdge * gl_GlobalInvocationID.y) +
+      gl_GlobalInvocationID.x;  
+  float patchSize = 2.0 / (VerticesPerEdge - 1);
+  vec3 cubePos = faceOrigin + (gl_GlobalInvocationID.x * patchSize * axis1) + (gl_GlobalInvocationID.y * patchSize * axis2);
+  vec3 cubePos2 = vec3(
+    pow(cubePos.x, 2),
+    pow(cubePos.y, 2),
+    pow(cubePos.z, 2));
+  vec3 spherePosition = vec3(
+    cubePos.x * sqrt(1 - cubePos2.y/2 - cubePos2.z/2 + cubePos2.y*cubePos2.z/3),
+    cubePos.y * sqrt(1 - cubePos2.z/2 - cubePos2.x/2 + cubePos2.z*cubePos2.x/3),
+    cubePos.z * sqrt(1 - cubePos2.x/2 - cubePos2.y/2 + cubePos2.x*cubePos2.y/3));
+  positions[vertexIndex] = spherePosition;
 }

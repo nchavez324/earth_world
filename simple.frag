@@ -1,4 +1,4 @@
-#version 140
+#version 430
 
 #define PI_OVER_TWO 1.570796327
 #define PI 3.1415926538
@@ -8,7 +8,8 @@ uniform sampler2D p3d_Texture0;
 
 // Input from vertex shader
 in vec4 v_Position;
-in vec4 v_Color;
+
+out vec4 p3d_FragColor;
 
 vec3 sphericalCoordsFromCartesian(vec3 coords) {
   // Panda3D is right-hand z-up, and world coords are still in Panda coords
@@ -30,5 +31,5 @@ void main() {
   vec2 uv = vec2(
     sphericalCoords.x / TWO_PI,
     (sphericalCoords.y + PI_OVER_TWO) / PI);
-  gl_FragColor = texture(p3d_Texture0, uv);
+  p3d_FragColor = texture(p3d_Texture0, uv);
 }

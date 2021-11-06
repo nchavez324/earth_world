@@ -1,18 +1,18 @@
-#version 140
+#version 430
 
 // Uniform inputs
 uniform mat4 p3d_ModelViewProjectionMatrix;
 
 // Vertex inputs
-in vec4 p3d_Vertex;
-in vec4 p3d_Color;
+layout(std430) buffer VertexBuffer {
+  vec3 positions[];
+};
 
 // Output to fragment shader
 out vec4 v_Position;
-out vec4 v_Color;
 
 void main() {
-  gl_Position = p3d_ModelViewProjectionMatrix * p3d_Vertex;
-  v_Position = p3d_Vertex;
-  v_Color = p3d_Color;
+  vec4 modelPosition = vec4(positions[gl_VertexID], 1);
+  gl_Position = p3d_ModelViewProjectionMatrix * modelPosition;
+  v_Position = modelPosition;
 }
