@@ -30,6 +30,9 @@ NodePath generateGlobeNode(GraphicsWindow *window, int verticesPerEdge) {
   // vec3 elements, which remain unchanged from {code|std140}}). Specifically,
   // they are no longer rounded up to a multiple of 16 bytes. So an array of
   // `float`s will match with a C++ array of `float`s.
+
+  // I ended up making it a vec4 anyway, since I'm sending other data with the
+  // vertex position, but note the above!!
   verticesPerEdge = std::max(verticesPerEdge, 2);
   int faceCount = 6;
   int verticesPerFace = verticesPerEdge * verticesPerEdge;
