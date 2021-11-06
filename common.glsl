@@ -4,6 +4,10 @@
 #define PI 3.1415926538
 #define TWO_PI 6.283185308
 
+// The bathymetry texture has land around 0, then the Marianas Trench at around
+// ~0.83, increasing in height until sea level at 1.
+#define BATHYMETRY_CUTOFF 0.8
+
 vec3 sphericalCoordsFromCartesian(vec3 coords) {
   // Panda3D is right-hand z-up, and world coords are still in Panda coords
   vec3 spherical = vec3(0, 0, 0);
@@ -24,4 +28,18 @@ vec2 sphericalUVFromCartesian(vec3 coords) {
   return vec2(
     sphericalCoords.x / TWO_PI,
     (sphericalCoords.y + PI_OVER_TWO) / PI);
+}
+
+float inverseMix(float from, float to, float value) {
+  return (value - from) / (to - from);
+}
+
+/**
+ * Transforms a sample from the bathymetry texture to a value in range
+ * [0:sea_level,1:marianas_trench].
+ */
+float depthFromBathymetryTexValue(float value) {
+  // The bathymetry texture has land around 0, then the Marianas Trench at
+  // around ~0.83, increasing in height until sea level at 1.
+  return 1 - inverseMix(0.8, 1, clamp(value, 0.8, 1));
 }

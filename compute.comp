@@ -5,10 +5,11 @@
 layout (local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 
 layout(std430) buffer VertexBuffer {
-  vec4 positions[];
+  vec3 positions[];
 };
 uniform uint VerticesPerEdge;
-uniform sampler2D HeightmapTex;
+uniform sampler2D TopologyTex;
+uniform sampler2D BathymetryTex;
 
 void main() {
   if (gl_GlobalInvocationID.x >= VerticesPerEdge ||
@@ -34,7 +35,10 @@ void main() {
       (VerticesPerEdge * gl_GlobalInvocationID.y) +
       gl_GlobalInvocationID.x;  
   float patchSize = 2.0 / (VerticesPerEdge - 1);
-  vec3 cubePos = faceOrigin + (gl_GlobalInvocationID.x * patchSize * axis1) + (gl_GlobalInvocationID.y * patchSize * axis2);
+  vec3 cubePos =
+      faceOrigin +
+      (gl_GlobalInvocationID.x * patchSize * axis1) +
+      (gl_GlobalInvocationID.y * patchSize * axis2);
   vec3 cubePos2 = vec3(
     pow(cubePos.x, 2),
     pow(cubePos.y, 2),
@@ -44,12 +48,18 @@ void main() {
     cubePos.y * sqrt(1 - cubePos2.z/2 - cubePos2.x/2 + cubePos2.z*cubePos2.x/3),
     cubePos.z * sqrt(1 - cubePos2.x/2 - cubePos2.y/2 + cubePos2.x*cubePos2.y/3));
   
+  float magnitude = 1;
   vec2 sphereUV = sphericalUVFromCartesian(spherePosition);
-  float height = texture(HeightmapTex, sphereUV).r;
-  float magnitude = mix(0.95, 1, height);
-  spherePosition *= magnitude;
+  float topology = texture(TopologyTex, sphereUV).r;
+  float bathymetry = texture(BathymetryTex, sphereUV).r;
 
-  positions[vertexIndex] = vec4(
-    spherePosition,
-    height);
+  if (bathymetry > BATHYMETRY_CUTOFF) {
+    float waterDepth = depthFromBathymetryTexValue(bathymetry);
+    magnitude = mix(0.95, 0.94, waterDepth);
+  } else {
+    magnitude = mix(0.95, 1, topology);
+  }
+
+  spherePosition *= magnitude;
+  positions[vertexIndex] = spherePosition;
 }

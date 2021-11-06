@@ -31,8 +31,6 @@ NodePath generateGlobeNode(GraphicsWindow *window, int verticesPerEdge) {
   // they are no longer rounded up to a multiple of 16 bytes. So an array of
   // `float`s will match with a C++ array of `float`s.
 
-  // I ended up making it a vec4 anyway, since I'm sending other data with the
-  // vertex position, but note the above!!
   verticesPerEdge = std::max(verticesPerEdge, 2);
   int faceCount = 6;
   int verticesPerFace = verticesPerEdge * verticesPerEdge;
@@ -72,15 +70,22 @@ NodePath generateGlobeNode(GraphicsWindow *window, int verticesPerEdge) {
   node->add_geom(geom);
   node->set_bounds_type(BoundingVolume::BT_box);
 
-  PT<Texture> texture = TexturePool::load_texture(
-      Filename("../../../../Downloads/topology_2048x1024.png"));
-  texture->set_wrap_u(SamplerState::WrapMode::WM_repeat);
+  PT<Texture> topologyTexture = TexturePool::load_texture(
+      Filename("../../../../Downloads/topology/topology_2048x1024.png"));
+  PT<Texture> bathymetryTexture = TexturePool::load_texture(
+      Filename("../../../../Downloads/bathymetry/bathymetry_2048x1024.png"));
+  PT(TextureStage) topologyStage = new TextureStage("TopologyStage");
+  PT(TextureStage) bathymetryStage = new TextureStage("BathymetryStage");
+  topologyTexture->set_wrap_u(SamplerState::WrapMode::WM_repeat);
+  bathymetryTexture->set_wrap_u(SamplerState::WrapMode::WM_repeat);
+
 
   PT<Shader> materialShader =
       Shader::load(Shader::SL_GLSL, "../../simple.vert", "../../simple.frag");
   NodePath globe(node);
   globe.set_shader(materialShader);
-  globe.set_texture(texture);
+  globe.set_texture(topologyStage, topologyTexture, /* priority= */ 0);
+  globe.set_texture(bathymetryStage, bathymetryTexture, /* priority= */ 1);
   globe.set_shader_input("VertexBuffer", vertexBuffer);
 
   PT<Shader> computeShader =
@@ -89,7 +94,8 @@ NodePath generateGlobeNode(GraphicsWindow *window, int verticesPerEdge) {
   compute.set_shader(computeShader);
   compute.set_shader_input("VerticesPerEdge", LVecBase2i(verticesPerEdge, 0));
   compute.set_shader_input("VertexBuffer", vertexBuffer);
-  compute.set_shader_input("HeightmapTex", texture);
+  compute.set_shader_input("TopologyTex", topologyTexture);
+  compute.set_shader_input("BathymetryTex", bathymetryTexture);
   CPT<ShaderAttrib> attributes =
       DCAST(ShaderAttrib, compute.get_attrib(ShaderAttrib::get_class_type()));
 
@@ -141,8 +147,14 @@ int main(int argc, char *argv[]) {
   load_prc_file("../../config.prc");
   PandaFramework framework;
   framework.open_framework(argc, argv);
-  framework.set_window_title("My Panda3D Window");
-  WindowFramework *const window = framework.open_window();
+
+  WindowProperties windowProperties;
+  windowProperties.set_title("Earth World");
+  windowProperties.set_size(LVecBase2i(800, 600));
+  windowProperties.set_fixed_size(false);
+  int flags = GraphicsPipe::BF_require_window;
+  WindowFramework *const window =
+      framework.open_window(windowProperties, flags);
 
   NodePath axes = generateAxesNode();
   axes.reparent_to(window->get_render());
