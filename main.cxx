@@ -1,8 +1,11 @@
+#include "panda3d/asyncTaskManager.h"
 #include "panda3d/boundingBox.h"
+#include "panda3d/clockObject.h"
 #include "panda3d/computeNode.h"
 #include "panda3d/geomLines.h"
 #include "panda3d/geomTriangles.h"
 #include "panda3d/load_prc_file.h"
+#include "panda3d/pStatClient.h"
 #include "panda3d/pandaFramework.h"
 #include "panda3d/pandaSystem.h"
 #include "panda3d/shader.h"
@@ -13,8 +16,92 @@ using PT = PointerTo<T>;
 template <typename T>
 using CPT = ConstPointerTo<T>;
 
+std::uintptr_t const KEY_PRESS_UP = 1;
+std::uintptr_t const KEY_RELEASE_UP = 2;
+std::uintptr_t const KEY_PRESS_DOWN = 3;
+std::uintptr_t const KEY_RELEASE_DOWN = 4;
+std::uintptr_t const KEY_PRESS_RIGHT = 5;
+std::uintptr_t const KEY_RELEASE_RIGHT = 6;
+std::uintptr_t const KEY_PRESS_LEFT = 7;
+std::uintptr_t const KEY_RELEASE_LEFT = 8;
+
+int kGlobeVerticesPerEdge = 250;
+PN_stdfloat kAxesScale = 40.f;
+PN_stdfloat kGlobeScale = 20.f;
+PN_stdfloat kBoatScale = 0.1f;
+PN_stdfloat kBoatSpeed = 0.1f;
+
+LVector2 g_inputAxis = LVector2::zero();
+LPoint3 g_boatSphericalCoords(0, 0, 1);
+NodePath g_boat;
+ClockObject *g_clock = ClockObject::get_global_clock();
+
+PN_stdfloat clamp(PN_stdfloat value, PN_stdfloat min, PN_stdfloat max);
+LQuaternion rotationBetweenVectors(const LVector3 &v1, const LVector3 &v2);
+LPoint3 sphericalCoordsFromCartesian(const LPoint3 &coords);
+LPoint3 cartesianCoordsFromSpherical(const LPoint3 &coords);
 NodePath generateGlobeNode(GraphicsWindow *window, int verticesPerEdge);
 NodePath generateAxesNode();
+AsyncTask::DoneStatus onFrameTask(GenericAsyncTask *task, void *_);
+void onKeyChanged(const Event *event, void *_);
+
+PN_stdfloat clamp(PN_stdfloat value, PN_stdfloat min, PN_stdfloat max) {
+  return std::max(min, std::min(max, value));
+}
+
+LQuaternion rotationBetweenVectors(const LVector3 &v1, const LVector3 &v2) {
+  // From Sam Hocevar's article "Quaternion from two vectors: the final version"
+  PN_stdfloat a = sqrtf(v1.length_squared() * v2.length_squared());
+  PN_stdfloat b = a + v1.dot(v2);
+  if (IS_NEARLY_EQUAL(b, 2 * a) || IS_NEARLY_ZERO(a)) {
+    return LQuaternion::ident_quat();
+  }
+  LVector3 axis(0);
+  if (b < 1e-06 * a) {
+    b = 0;
+    if (abs(v1.get_x()) > abs(v1.get_z())) {
+      axis = LVector3(-v1.get_y(), v1.get_x(), 0);
+    } else {
+      axis = LVector3(0, -v1.get_z(), v1.get_y());
+    }
+  } else {
+    axis = v1.cross(v2);
+  }
+  LQuaternion rotation(b, axis.get_x(), axis.get_y(), axis.get_z());
+  rotation.normalize();
+  return rotation;
+}
+
+/**
+ * Returns a spherical coordinate in radians, where the first/x component is the
+ * azimuthal angle [0, 2PI] and the second/y component is the polar angle
+ * [-PI/2,PI/2] (both in radians), and the third/z component is the radius.
+ */
+LPoint3 sphericalCoordsFromCartesian(const LPoint3 &coords) {
+  // In Panda3D, coordinate system is right handed, with Z as up.
+  // Convention:
+  //   - +X axis is azimuth = 0, increasing clockwise
+  //   - XY plane is polar = 0, increasing towards +Z, decreasing towards -Z
+  PN_stdfloat azimuth = 0;
+  if (coords.get_x() != 0 || coords.get_y() != 0) {
+    // Negate inputs so after addition, 0 is +X and clockwise
+    // Returns [-PI,PI], so add PI to move to [0,2PI]
+    azimuth = atan2f(-coords.get_y(), -coords.get_x()) + MathNumbers::pi;
+  }
+  PN_stdfloat xyLength = coords.get_xy().length();
+  PN_stdfloat polar = 0;
+  if (xyLength != 0 || coords.get_z() != 0) {
+    polar = atan2f(coords.get_z(), xyLength);
+  }
+  return LPoint3(azimuth, polar, coords.length());
+}
+
+LPoint3 cartesianCoordsFromSpherical(const LPoint3 &coords) {
+  // x is azimuth [0,2PI], y is polar [-PI/2,PI/2], z is radius.
+  return LPoint3(coords.get_z() * cosf(coords.get_y()) * cosf(coords.get_x()),
+                 coords.get_z() * cosf(coords.get_y()) * sinf(coords.get_x()),
+                 coords.get_z() * sinf(coords.get_y()));
+}
 
 NodePath generateGlobeNode(GraphicsWindow *window, int verticesPerEdge) {
   // Among the most important is the fact that arrays of types are not
@@ -64,7 +151,7 @@ NodePath generateGlobeNode(GraphicsWindow *window, int verticesPerEdge) {
   PT<Geom> geom = new Geom(vertexData);
   geom->add_primitive(triangles);
   PT<BoundingBox> bounds =
-      new BoundingBox(LPoint3(-2, -2, -2), LPoint3(2, 2, 2));
+      new BoundingBox(LPoint3(-1, -1, -1), LPoint3(1, 1, 1));
   geom->set_bounds(bounds);
   PT<GeomNode> node = new GeomNode("Globe");
   node->add_geom(geom);
@@ -79,7 +166,6 @@ NodePath generateGlobeNode(GraphicsWindow *window, int verticesPerEdge) {
   topologyTexture->set_wrap_u(SamplerState::WrapMode::WM_repeat);
   bathymetryTexture->set_wrap_u(SamplerState::WrapMode::WM_repeat);
 
-
   PT<Shader> materialShader =
       Shader::load(Shader::SL_GLSL, "../../simple.vert", "../../simple.frag");
   NodePath globe(node);
@@ -92,14 +178,14 @@ NodePath generateGlobeNode(GraphicsWindow *window, int verticesPerEdge) {
       Shader::load_compute(Shader::SL_GLSL, "../../compute.comp");
   NodePath compute("compute");
   compute.set_shader(computeShader);
-  compute.set_shader_input("VerticesPerEdge", LVecBase2i(verticesPerEdge, 0));
+  compute.set_shader_input("VerticesPerEdge", LVector2i(verticesPerEdge, 0));
   compute.set_shader_input("VertexBuffer", vertexBuffer);
   compute.set_shader_input("TopologyTex", topologyTexture);
   compute.set_shader_input("BathymetryTex", bathymetryTexture);
   CPT<ShaderAttrib> attributes =
       DCAST(ShaderAttrib, compute.get_attrib(ShaderAttrib::get_class_type()));
 
-  LVecBase3i work_groups(verticesPerEdge, verticesPerEdge, faceCount);
+  LVector3i work_groups(verticesPerEdge, verticesPerEdge, faceCount);
   GraphicsEngine *engine = GraphicsEngine::get_global_ptr();
   engine->dispatch_compute(work_groups, attributes, window->get_gsg());
 
@@ -110,7 +196,7 @@ NodePath generateAxesNode() {
   PT<GeomLines> lines = new GeomLines(Geom::UH_static);
   PT<GeomVertexData> vdata =
       new GeomVertexData("Axes", GeomVertexFormat::get_v3c4(), Geom::UH_static);
-  vdata->set_num_rows(6);
+  vdata->set_num_rows(12);
   GeomVertexWriter vertices(vdata, "vertex");
   GeomVertexWriter colors(vdata, "color");
 
@@ -120,18 +206,31 @@ NodePath generateAxesNode() {
   colors.add_data4(1, 0, 0, 1);
 
   vertices.add_data3(0, 0, 0);
+  vertices.add_data3(-1, 0, 0);
+  colors.add_data4(0, 1, 1, 1);
+  colors.add_data4(0, 1, 1, 1);
+
+  vertices.add_data3(0, 0, 0);
   vertices.add_data3(0, 1, 0);
   colors.add_data4(0, 1, 0, 1);
   colors.add_data4(0, 1, 0, 1);
+
+  vertices.add_data3(0, 0, 0);
+  vertices.add_data3(0, -1, 0);
+  colors.add_data4(1, 0, 1, 1);
+  colors.add_data4(1, 0, 1, 1);
 
   vertices.add_data3(0, 0, 0);
   vertices.add_data3(0, 0, 1);
   colors.add_data4(0, 0, 1, 1);
   colors.add_data4(0, 0, 1, 1);
 
-  lines->add_vertices(0, 1);
-  lines->add_vertices(2, 3);
-  lines->add_vertices(4, 5);
+  vertices.add_data3(0, 0, 0);
+  vertices.add_data3(0, 0, -1);
+  colors.add_data4(1, 1, 0, 1);
+  colors.add_data4(1, 1, 0, 1);
+
+  lines->add_consecutive_vertices(0, 12);
   lines->close_primitive();
 
   PT<Geom> geom = new Geom(vdata);
@@ -143,29 +242,135 @@ NodePath generateAxesNode() {
   return nodePath;
 }
 
+AsyncTask::DoneStatus onFrameTask(GenericAsyncTask *task, void *_) {
+  PN_stdfloat newAzimuth = g_boatSphericalCoords.get_x() +
+                           kBoatSpeed * g_clock->get_dt() * g_inputAxis.get_x();
+  if (newAzimuth < 0) {
+    newAzimuth += 2 * MathNumbers::pi;
+  }
+  if (newAzimuth > 2 * MathNumbers::pi) {
+    newAzimuth -= 2 * MathNumbers::pi;
+  }
+  PN_stdfloat newPolar = g_boatSphericalCoords.get_y() +
+                         kBoatSpeed * g_clock->get_dt() * g_inputAxis.get_y();
+  if (newPolar > MathNumbers::pi / 2) {
+    newPolar = MathNumbers::pi - newPolar;
+    newAzimuth = newAzimuth < MathNumbers::pi ? MathNumbers::pi + newAzimuth
+                                              : newAzimuth - MathNumbers::pi;
+  }
+  if (newPolar < -MathNumbers::pi / 2) {
+    newPolar = MathNumbers::pi + newPolar;
+    newAzimuth = newAzimuth < MathNumbers::pi_f ? MathNumbers::pi + newAzimuth
+                                                : newAzimuth - MathNumbers::pi;
+  }
+  g_boatSphericalCoords.set_x(newAzimuth);
+  g_boatSphericalCoords.set_y(newPolar);
+  LVecBase3 pointOnSphere = cartesianCoordsFromSpherical(g_boatSphericalCoords);
+  LVecBase3 newPosition = 0.945f * kGlobeScale * pointOnSphere;
+  LQuaternion newRotation =
+      rotationBetweenVectors(LVector3::up(), pointOnSphere);
+  g_boat.set_pos(newPosition);
+  g_boat.set_quat(newRotation);
+  return AsyncTask::DoneStatus::DS_cont;
+}
+
+void onKeyChanged(const Event *event, void *userData) {
+  std::uintptr_t keyEvent = reinterpret_cast<std::uintptr_t>(userData);
+  switch (keyEvent) {
+    case KEY_PRESS_UP:
+    case KEY_RELEASE_DOWN:
+      g_inputAxis.set_y(std::min(1.f, g_inputAxis.get_y() + 1));
+      break;
+    case KEY_PRESS_DOWN:
+    case KEY_RELEASE_UP:
+      g_inputAxis.set_y(std::max(-1.f, g_inputAxis.get_y() - 1));
+      break;
+    case KEY_PRESS_RIGHT:
+    case KEY_RELEASE_LEFT:
+      g_inputAxis.set_x(std::min(1.f, g_inputAxis.get_x() + 1));
+      break;
+    case KEY_PRESS_LEFT:
+    case KEY_RELEASE_RIGHT:
+      g_inputAxis.set_x(std::max(-1.f, g_inputAxis.get_x() - 1));
+      break;
+    default:
+      return;
+  }
+}
+
 int main(int argc, char *argv[]) {
   load_prc_file("../../config.prc");
+  if (PStatClient::is_connected()) {
+    PStatClient::disconnect();
+  }
+  if (!PStatClient::connect()) {
+    std::cout << "Could not connect to PStat server." << std::endl;
+  }
+
   PandaFramework framework;
   framework.open_framework(argc, argv);
 
   WindowProperties windowProperties;
   windowProperties.set_title("Earth World");
-  windowProperties.set_size(LVecBase2i(800, 600));
+  windowProperties.set_size(LVector2i(800, 600));
   windowProperties.set_fixed_size(false);
   int flags = GraphicsPipe::BF_require_window;
   WindowFramework *const window =
       framework.open_window(windowProperties, flags);
+  window->setup_trackball();
+  window->enable_keyboard();
 
   NodePath axes = generateAxesNode();
   axes.reparent_to(window->get_render());
-  axes.set_scale(10);
+  axes.set_scale(kAxesScale);
 
-  NodePath globe = generateGlobeNode(window->get_graphics_window(),
-                                     /* verticesPerEdge= */ 250);
+  NodePath globe =
+      generateGlobeNode(window->get_graphics_window(),
+                        /* verticesPerEdge= */ kGlobeVerticesPerEdge);
   globe.reparent_to(window->get_render());
-  globe.set_scale(5);
+  globe.set_scale(kGlobeScale);
 
-  window->setup_trackball();
+  g_boat = window->load_model(framework.get_models(),
+                              "../../../../Downloads/boat/S_Boat.bam");
+  g_boat.reparent_to(window->get_render());
+  g_boat.set_scale(kBoatScale);
+
+  PT<GenericAsyncTask> frameTask =
+      new GenericAsyncTask("Frame", &onFrameTask, /* userData= */ nullptr);
+  framework.get_task_mgr().add(frameTask);
+
+  framework.define_key("w", "Up pressed", &onKeyChanged,
+                       reinterpret_cast<void *>(KEY_PRESS_UP));
+  framework.define_key("w-up", "Up released", &onKeyChanged,
+                       reinterpret_cast<void *>(KEY_RELEASE_UP));
+  framework.define_key("s", "Down pressed", &onKeyChanged,
+                       reinterpret_cast<void *>(KEY_PRESS_DOWN));
+  framework.define_key("s-up", "Down released", &onKeyChanged,
+                       reinterpret_cast<void *>(KEY_RELEASE_DOWN));
+  framework.define_key("d", "Right pressed", &onKeyChanged,
+                       reinterpret_cast<void *>(KEY_PRESS_RIGHT));
+  framework.define_key("d-up", "Right released", &onKeyChanged,
+                       reinterpret_cast<void *>(KEY_RELEASE_RIGHT));
+  framework.define_key("a", "Left pressed", &onKeyChanged,
+                       reinterpret_cast<void *>(KEY_PRESS_LEFT));
+  framework.define_key("a-up", "Left released", &onKeyChanged,
+                       reinterpret_cast<void *>(KEY_RELEASE_LEFT));
+  framework.define_key("arrow_up", "Up pressed", &onKeyChanged,
+                       reinterpret_cast<void *>(KEY_PRESS_UP));
+  framework.define_key("arrow_up-up", "Up released", &onKeyChanged,
+                       reinterpret_cast<void *>(KEY_RELEASE_UP));
+  framework.define_key("arrow_down", "Down pressed", &onKeyChanged,
+                       reinterpret_cast<void *>(KEY_PRESS_DOWN));
+  framework.define_key("arrow_down-up", "Down released", &onKeyChanged,
+                       reinterpret_cast<void *>(KEY_RELEASE_DOWN));
+  framework.define_key("arrow_right", "Right pressed", &onKeyChanged,
+                       reinterpret_cast<void *>(KEY_PRESS_RIGHT));
+  framework.define_key("arrow_right-up", "Right released", &onKeyChanged,
+                       reinterpret_cast<void *>(KEY_RELEASE_RIGHT));
+  framework.define_key("arrow_left", "Left pressed", &onKeyChanged,
+                       reinterpret_cast<void *>(KEY_PRESS_LEFT));
+  framework.define_key("arrow_left-up", "Left released", &onKeyChanged,
+                       reinterpret_cast<void *>(KEY_RELEASE_LEFT));
 
   framework.main_loop();
   framework.close_framework();
