@@ -25,19 +25,26 @@ std::uintptr_t const KEY_RELEASE_RIGHT = 6;
 std::uintptr_t const KEY_PRESS_LEFT = 7;
 std::uintptr_t const KEY_RELEASE_LEFT = 8;
 
-int kGlobeVerticesPerEdge = 250;
+int kGlobeVerticesPerEdge = 100;
 PN_stdfloat kAxesScale = 40.f;
 PN_stdfloat kGlobeScale = 20.f;
-PN_stdfloat kBoatScale = 0.1f;
-PN_stdfloat kBoatSpeed = 0.1f;
+PN_stdfloat kGlobeWaterSurfaceHeight = 0.95f;
+PN_stdfloat kBoatScale = 0.05f;
+PN_stdfloat kBoatSpeed = 0.07f;  // 0.15f;
+PN_stdfloat kCameraDistance = 6.f;
 
 LVector2 g_inputAxis = LVector2::zero();
 LPoint3 g_boatSphericalCoords(0, 0, 1);
+PN_stdfloat g_boatHeading = 0.f;
 NodePath g_boat;
+NodePath g_camera;
 ClockObject *g_clock = ClockObject::get_global_clock();
+WindowFramework *g_window = nullptr;
 
 PN_stdfloat clamp(PN_stdfloat value, PN_stdfloat min, PN_stdfloat max);
+LQuaternion quatFromOrthonormalMatrix(const LMatrix3 &a);
 LQuaternion rotationBetweenVectors(const LVector3 &v1, const LVector3 &v2);
+LQuaternion rotationLookAt(const LVector3 &forward, const LVector3 &up);
 LPoint3 sphericalCoordsFromCartesian(const LPoint3 &coords);
 LPoint3 cartesianCoordsFromSpherical(const LPoint3 &coords);
 NodePath generateGlobeNode(GraphicsWindow *window, int verticesPerEdge);
@@ -47,6 +54,41 @@ void onKeyChanged(const Event *event, void *_);
 
 PN_stdfloat clamp(PN_stdfloat value, PN_stdfloat min, PN_stdfloat max) {
   return std::max(min, std::min(max, value));
+}
+
+LQuaternion quatFromOrthonormalMatrix(const LMatrix3 &a) {
+  PN_stdfloat trace = a[0][0] + a[1][1] + a[2][2];
+  if (trace > 0) {
+    PN_stdfloat s = 0.5f / sqrtf(trace + 1.f);
+    return LQuaternion(
+      0.25f / s,
+      (a[2][1] - a[1][2]) * s,
+      (a[0][2] - a[2][0]) * s,
+      (a[1][0] - a[0][1]) * s);
+  } else {
+    if (a[0][0] > a[1][1] && a[0][0] > a[2][2]) {
+      PN_stdfloat s = 2.f * sqrtf(1.f + a[0][0] - a[1][1] - a[2][2]);
+      return LQuaternion(
+        (a[2][1] - a[1][2]) / s,
+        0.25f * s,
+        (a[0][1] + a[1][0]) / s,
+        (a[0][2] + a[2][0]) / s);
+    } else if (a[1][1] > a[2][2]) {
+      PN_stdfloat s = 2.f * sqrtf(1.f + a[1][1] - a[0][0] - a[2][2]);
+      return LQuaternion(
+        (a[0][2] - a[2][0]) / s,
+        (a[0][1] + a[1][0]) / s,
+        0.25f * s,
+        (a[1][2] + a[2][1]) / s);
+    } else {
+      PN_stdfloat s = 2.f * sqrtf(1.f + a[2][2] - a[0][0] - a[1][1]);
+      return LQuaternion(
+        (a[1][0] - a[0][1]) / s,
+        (a[0][2] + a[2][0]) / s,
+        (a[1][2] + a[2][1]) / s,
+        0.25f * s);
+    }
+  }
 }
 
 LQuaternion rotationBetweenVectors(const LVector3 &v1, const LVector3 &v2) {
@@ -70,6 +112,24 @@ LQuaternion rotationBetweenVectors(const LVector3 &v1, const LVector3 &v2) {
   LQuaternion rotation(b, axis.get_x(), axis.get_y(), axis.get_z());
   rotation.normalize();
   return rotation;
+}
+
+/**
+ * Returns a rotation such that forward (+Y) rotates to the given forward, and
+ * right (+X) rotates to the cross product of the given forward and up.
+ */
+LQuaternion rotationLookAt(const LVector3 &newForward, const LVector3 &upIsh) {
+  // Create orthonormal transformation.
+  LVector3 newRight = newForward.cross(upIsh);
+  newRight.normalize();
+  LVector3 newUp = newRight.cross(newForward);
+  newUp.normalize();
+  LMatrix3 transformation;
+  transformation.set_col(0, newRight);
+  transformation.set_col(1, newForward.normalized());
+  transformation.set_col(2, newUp);
+  // Convert into a Quaternion.
+  return quatFromOrthonormalMatrix(transformation);
 }
 
 /**
@@ -243,34 +303,58 @@ NodePath generateAxesNode() {
 }
 
 AsyncTask::DoneStatus onFrameTask(GenericAsyncTask *task, void *_) {
-  PN_stdfloat newAzimuth = g_boatSphericalCoords.get_x() +
-                           kBoatSpeed * g_clock->get_dt() * g_inputAxis.get_x();
-  if (newAzimuth < 0) {
-    newAzimuth += 2 * MathNumbers::pi;
+  // 1. Determine the velocity, by using the input in the camera's basis.
+  CPT<TransformState> cameraXform = g_camera.get_net_transform();
+  LVector3 cameraRight = cameraXform->get_quat().get_right();
+  LVector3 cameraUp = cameraXform->get_quat().get_up();
+  LVector3 cameraBack = -cameraXform->get_quat().get_forward();
+  LVector2 normalizedInput = g_inputAxis.normalized();
+  LVector3 heading =
+      (cameraRight * g_inputAxis.get_x()) + (cameraUp * g_inputAxis.get_y());
+  heading.normalize();
+  LVector3 positionDelta = heading * kBoatSpeed * g_clock->get_dt();
+
+  // 2. Update the boat's position in cartesian space and snap onto sphere.
+  LVector3 newBoatUnitPosition =
+      (cartesianCoordsFromSpherical(g_boatSphericalCoords) + positionDelta)
+          .normalized();
+  LVector3 newBoatUnitSphericalPosition =
+      sphericalCoordsFromCartesian(newBoatUnitPosition);
+  g_boatSphericalCoords = newBoatUnitSphericalPosition;
+
+  // 4. Convert it into the world position.
+  LVector3 newBoatPosition =
+      kGlobeWaterSurfaceHeight * kGlobeScale * newBoatUnitPosition;
+  g_boat.set_pos(newBoatPosition);
+
+  // 5. Update the heading if the input was non zero.
+  if (!IS_NEARLY_ZERO(g_inputAxis.get_x()) ||
+      !IS_NEARLY_ZERO(g_inputAxis.get_y())) {
+    PN_stdfloat newHeading =
+        atan2f(normalizedInput.get_y(), normalizedInput.get_x());
+    if (newHeading < 0) {
+      newHeading += 2 * MathNumbers::pi;
+    }
+    g_boatHeading = newHeading;
   }
-  if (newAzimuth > 2 * MathNumbers::pi) {
-    newAzimuth -= 2 * MathNumbers::pi;
-  }
-  PN_stdfloat newPolar = g_boatSphericalCoords.get_y() +
-                         kBoatSpeed * g_clock->get_dt() * g_inputAxis.get_y();
-  if (newPolar > MathNumbers::pi / 2) {
-    newPolar = MathNumbers::pi - newPolar;
-    newAzimuth = newAzimuth < MathNumbers::pi ? MathNumbers::pi + newAzimuth
-                                              : newAzimuth - MathNumbers::pi;
-  }
-  if (newPolar < -MathNumbers::pi / 2) {
-    newPolar = MathNumbers::pi + newPolar;
-    newAzimuth = newAzimuth < MathNumbers::pi_f ? MathNumbers::pi + newAzimuth
-                                                : newAzimuth - MathNumbers::pi;
-  }
-  g_boatSphericalCoords.set_x(newAzimuth);
-  g_boatSphericalCoords.set_y(newPolar);
-  LVecBase3 pointOnSphere = cartesianCoordsFromSpherical(g_boatSphericalCoords);
-  LVecBase3 newPosition = 0.945f * kGlobeScale * pointOnSphere;
-  LQuaternion newRotation =
-      rotationBetweenVectors(LVector3::up(), pointOnSphere);
-  g_boat.set_pos(newPosition);
+
+  // 6. Transform the heading into a world rotation.
+  LVector3 boatRight = LVector3::up().cross(newBoatUnitPosition);
+  LVector3 boatUp = newBoatUnitPosition.cross(boatRight);
+  LVector3 boatHeading =
+      (cosf(g_boatHeading) * boatRight) + (sinf(g_boatHeading) * boatUp);
+  boatHeading.normalize();
+  LQuaternion newRotation = rotationLookAt(boatHeading, newBoatUnitPosition);
   g_boat.set_quat(newRotation);
+
+  // 7. Float the camera above the boat and look at it.
+  LVector3 newCameraPosition =
+      newBoatPosition + (kCameraDistance * newBoatUnitPosition);
+  LQuaternion newCameraRotation =
+      rotationLookAt(-newBoatUnitPosition, LVector3::up());
+  g_camera.set_pos(newCameraPosition);
+  g_camera.set_quat(newCameraRotation);
+
   return AsyncTask::DoneStatus::DS_cont;
 }
 
@@ -315,25 +399,27 @@ int main(int argc, char *argv[]) {
   windowProperties.set_size(LVector2i(800, 600));
   windowProperties.set_fixed_size(false);
   int flags = GraphicsPipe::BF_require_window;
-  WindowFramework *const window =
-      framework.open_window(windowProperties, flags);
-  window->setup_trackball();
-  window->enable_keyboard();
+  g_window = framework.open_window(windowProperties, flags);
+  g_window->enable_keyboard();
 
   NodePath axes = generateAxesNode();
-  axes.reparent_to(window->get_render());
+  axes.reparent_to(g_window->get_render());
   axes.set_scale(kAxesScale);
 
   NodePath globe =
-      generateGlobeNode(window->get_graphics_window(),
+      generateGlobeNode(g_window->get_graphics_window(),
                         /* verticesPerEdge= */ kGlobeVerticesPerEdge);
-  globe.reparent_to(window->get_render());
+  globe.reparent_to(g_window->get_render());
   globe.set_scale(kGlobeScale);
 
-  g_boat = window->load_model(framework.get_models(),
-                              "../../../../Downloads/boat/S_Boat.bam");
-  g_boat.reparent_to(window->get_render());
+  g_boat = g_window->load_model(framework.get_models(),
+                                "../../../../Downloads/boat/S_Boat.bam");
+  g_boat.reparent_to(g_window->get_render());
   g_boat.set_scale(kBoatScale);
+
+  g_camera = g_window->get_camera_group();
+  g_camera.set_pos((kGlobeScale + kCameraDistance) * LVector3::right());
+  g_camera.set_quat(rotationLookAt(LVector3::left(), LVector3::up()));
 
   PT<GenericAsyncTask> frameTask =
       new GenericAsyncTask("Frame", &onFrameTask, /* userData= */ nullptr);
