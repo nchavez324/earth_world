@@ -5,7 +5,7 @@
 layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 
 uniform vec3 u_PlayerSphericalCoords;
-uniform writeonly layout(rgba32f) image2D u_VisibilityTex;
+uniform writeonly layout(r8) image2D u_VisibilityTex;
 
 void main() {
   ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);

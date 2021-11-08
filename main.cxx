@@ -217,29 +217,43 @@ NodePath generateGlobeNode(int verticesPerEdge) {
 
   PT<Texture> visibilityTexture = new Texture("VisibilityTexture");
   visibilityTexture->setup_2d_texture(2048, 1024, Texture::T_float,
-                                      Texture::F_rgba32);
+                                      Texture::F_red);
   LColor clear_color(0, 0, 0, 0);
   visibilityTexture->set_clear_color(clear_color);
+  visibilityTexture->set_wrap_u(SamplerState::WM_repeat);
 
+  LoaderOptions options;
+  options.set_texture_flags(LoaderOptions::TF_float);
   PT<Texture> topologyTexture = TexturePool::load_texture(
-      "../../../../Downloads/topology/topology_2048x1024.png");
+      "../../../../Downloads/topology/topology_2048x1024.png",
+      /* primaryFileNumChannels= */ 1, /* readMipmaps= */ false, options);
+  topologyTexture->set_format(Texture::F_red);
+  topologyTexture->set_wrap_u(SamplerState::WM_repeat);
+
   PT<Texture> bathymetryTexture = TexturePool::load_texture(
-      "../../../../Downloads/bathymetry/bathymetry_2048x1024.png");
+      "../../../../Downloads/bathymetry/bathymetry_2048x1024.png",
+      /* primaryFileNumChannels= */ 1, /* readMipmaps= */ false, options);
+  bathymetryTexture->set_format(Texture::F_red);
+  bathymetryTexture->set_wrap_u(SamplerState::WM_repeat);
+
   PT<Texture> albedoTexture = TexturePool::load_texture(
-      "../../../../Downloads/albedo/1_2048x1024.png");
-  PT<Texture> incognitaTexture =
-      TexturePool::load_texture("../../../../Downloads/albedo/paper.jpeg");
+      "../../../../Downloads/albedo/1_2048x1024.png",
+      /* primaryFileNumChannels= */ 3, /* readMipmaps= */ false, options);
+  albedoTexture->set_wrap_u(SamplerState::WM_repeat);
+  albedoTexture->set_format(Texture::F_rgb);
+
+  PT<Texture> incognitaTexture = TexturePool::load_texture(
+      "../../../../Downloads/albedo/paper.jpeg",
+      /* primaryFileNumChannels= */ 3, /* readMipmaps= */ false, options);
+  incognitaTexture->set_format(Texture::F_rgb);
+  incognitaTexture->set_wrap_u(SamplerState::WM_repeat);
+  incognitaTexture->set_wrap_v(SamplerState::WM_repeat);
+
   PT<TextureStage> topologyStage = new TextureStage("TopologyStage");
   PT<TextureStage> bathymetryStage = new TextureStage("BathymetryStage");
   PT<TextureStage> albedoStage = new TextureStage("AlbedoStage");
   PT<TextureStage> visibilityStage = new TextureStage("VisibilityStage");
   PT<TextureStage> incognitaStage = new TextureStage("IncognitaStage");
-  topologyTexture->set_wrap_u(SamplerState::WM_repeat);
-  bathymetryTexture->set_wrap_u(SamplerState::WM_repeat);
-  albedoTexture->set_wrap_u(SamplerState::WM_repeat);
-  visibilityTexture->set_wrap_u(SamplerState::WM_repeat);
-  incognitaTexture->set_wrap_u(SamplerState::WM_repeat);
-  incognitaTexture->set_wrap_v(SamplerState::WM_repeat);
 
   PT<Shader> materialShader =
       Shader::load(Shader::SL_GLSL, "../../simple.vert", "../../simple.frag");
