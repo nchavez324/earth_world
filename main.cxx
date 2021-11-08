@@ -25,13 +25,13 @@ std::uintptr_t const KEY_RELEASE_RIGHT = 6;
 std::uintptr_t const KEY_PRESS_LEFT = 7;
 std::uintptr_t const KEY_RELEASE_LEFT = 8;
 
-int kGlobeVerticesPerEdge = 100;
-PN_stdfloat kAxesScale = 40.f;
-PN_stdfloat kGlobeScale = 20.f;
-PN_stdfloat kGlobeWaterSurfaceHeight = 0.95f;
-PN_stdfloat kBoatScale = 0.05f;
-PN_stdfloat kBoatSpeed = 0.07f;  // 0.15f;
-PN_stdfloat kCameraDistance = 6.f;
+int const kGlobeVerticesPerEdge = 100;
+PN_stdfloat const kAxesScale = 40.f;
+PN_stdfloat const kGlobeScale = 20.f;
+PN_stdfloat const kGlobeWaterSurfaceHeight = 0.95f;
+PN_stdfloat const kBoatScale = 0.05f;
+PN_stdfloat const kBoatSpeed = 0.07f;
+PN_stdfloat const kCameraDistance = 6.f;
 
 LVector2 g_inputAxis = LVector2::zero();
 LPoint3 g_boatSphericalCoords(0, 0, 1);
@@ -60,33 +60,21 @@ LQuaternion quatFromOrthonormalMatrix(const LMatrix3 &a) {
   PN_stdfloat trace = a[0][0] + a[1][1] + a[2][2];
   if (trace > 0) {
     PN_stdfloat s = 0.5f / sqrtf(trace + 1.f);
-    return LQuaternion(
-      0.25f / s,
-      (a[2][1] - a[1][2]) * s,
-      (a[0][2] - a[2][0]) * s,
-      (a[1][0] - a[0][1]) * s);
+    return LQuaternion(0.25f / s, (a[2][1] - a[1][2]) * s,
+                       (a[0][2] - a[2][0]) * s, (a[1][0] - a[0][1]) * s);
   } else {
     if (a[0][0] > a[1][1] && a[0][0] > a[2][2]) {
       PN_stdfloat s = 2.f * sqrtf(1.f + a[0][0] - a[1][1] - a[2][2]);
-      return LQuaternion(
-        (a[2][1] - a[1][2]) / s,
-        0.25f * s,
-        (a[0][1] + a[1][0]) / s,
-        (a[0][2] + a[2][0]) / s);
+      return LQuaternion((a[2][1] - a[1][2]) / s, 0.25f * s,
+                         (a[0][1] + a[1][0]) / s, (a[0][2] + a[2][0]) / s);
     } else if (a[1][1] > a[2][2]) {
       PN_stdfloat s = 2.f * sqrtf(1.f + a[1][1] - a[0][0] - a[2][2]);
-      return LQuaternion(
-        (a[0][2] - a[2][0]) / s,
-        (a[0][1] + a[1][0]) / s,
-        0.25f * s,
-        (a[1][2] + a[2][1]) / s);
+      return LQuaternion((a[0][2] - a[2][0]) / s, (a[0][1] + a[1][0]) / s,
+                         0.25f * s, (a[1][2] + a[2][1]) / s);
     } else {
       PN_stdfloat s = 2.f * sqrtf(1.f + a[2][2] - a[0][0] - a[1][1]);
-      return LQuaternion(
-        (a[1][0] - a[0][1]) / s,
-        (a[0][2] + a[2][0]) / s,
-        (a[1][2] + a[2][1]) / s,
-        0.25f * s);
+      return LQuaternion((a[1][0] - a[0][1]) / s, (a[0][2] + a[2][0]) / s,
+                         (a[1][2] + a[2][1]) / s, 0.25f * s);
     }
   }
 }
@@ -218,13 +206,17 @@ NodePath generateGlobeNode(GraphicsWindow *window, int verticesPerEdge) {
   node->set_bounds_type(BoundingVolume::BT_box);
 
   PT<Texture> topologyTexture = TexturePool::load_texture(
-      Filename("../../../../Downloads/topology/topology_2048x1024.png"));
+      "../../../../Downloads/topology/topology_2048x1024.png");
   PT<Texture> bathymetryTexture = TexturePool::load_texture(
-      Filename("../../../../Downloads/bathymetry/bathymetry_2048x1024.png"));
+      "../../../../Downloads/bathymetry/bathymetry_2048x1024.png");
+  PT<Texture> albedoTexture = TexturePool::load_texture(
+      "../../../../Downloads/albedo/1_2048x1024.png");
   PT(TextureStage) topologyStage = new TextureStage("TopologyStage");
   PT(TextureStage) bathymetryStage = new TextureStage("BathymetryStage");
-  topologyTexture->set_wrap_u(SamplerState::WrapMode::WM_repeat);
-  bathymetryTexture->set_wrap_u(SamplerState::WrapMode::WM_repeat);
+  PT(TextureStage) albedoStage = new TextureStage("AlbedoStage");
+  topologyTexture->set_wrap_u(SamplerState::WM_repeat);
+  bathymetryTexture->set_wrap_u(SamplerState::WM_repeat);
+  albedoTexture->set_wrap_u(SamplerState::WM_repeat);
 
   PT<Shader> materialShader =
       Shader::load(Shader::SL_GLSL, "../../simple.vert", "../../simple.frag");
@@ -232,6 +224,7 @@ NodePath generateGlobeNode(GraphicsWindow *window, int verticesPerEdge) {
   globe.set_shader(materialShader);
   globe.set_texture(topologyStage, topologyTexture, /* priority= */ 0);
   globe.set_texture(bathymetryStage, bathymetryTexture, /* priority= */ 1);
+  globe.set_texture(albedoStage, albedoTexture, /* priority= */ 2);
   globe.set_shader_input("VertexBuffer", vertexBuffer);
 
   PT<Shader> computeShader =
