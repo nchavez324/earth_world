@@ -2,18 +2,18 @@
 
 #pragma include "common.glsl"
 
-layout (local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 
-layout(std430) buffer VertexBuffer {
+layout(std430) buffer u_VertexBuffer {
   vec3 positions[];
 };
-uniform uint VerticesPerEdge;
-uniform sampler2D TopologyTex;
-uniform sampler2D BathymetryTex;
+uniform uint u_VerticesPerEdge;
+uniform sampler2D u_TopologyTex;
+uniform sampler2D u_BathymetryTex;
 
 void main() {
-  if (gl_GlobalInvocationID.x >= VerticesPerEdge ||
-      gl_GlobalInvocationID.y >= VerticesPerEdge ||
+  if (gl_GlobalInvocationID.x >= u_VerticesPerEdge ||
+      gl_GlobalInvocationID.y >= u_VerticesPerEdge ||
       gl_GlobalInvocationID.z >= 6) {
     return;
   }
@@ -31,10 +31,10 @@ void main() {
   vec3 faceOrigin = normal - axis1 - axis2;
 
   uint vertexIndex =
-      (VerticesPerEdge * VerticesPerEdge * gl_GlobalInvocationID.z) +
-      (VerticesPerEdge * gl_GlobalInvocationID.y) +
+      (u_VerticesPerEdge * u_VerticesPerEdge * gl_GlobalInvocationID.z) +
+      (u_VerticesPerEdge * gl_GlobalInvocationID.y) +
       gl_GlobalInvocationID.x;  
-  float patchSize = 2.0 / (VerticesPerEdge - 1);
+  float patchSize = 2.0 / (u_VerticesPerEdge - 1);
   vec3 cubePos =
       faceOrigin +
       (gl_GlobalInvocationID.x * patchSize * axis1) +
@@ -50,8 +50,8 @@ void main() {
   
   float magnitude = 1;
   vec2 sphereUV = sphericalUVFromCartesian(spherePosition);
-  float topology = texture(TopologyTex, sphereUV).r;
-  float bathymetry = texture(BathymetryTex, sphereUV).r;
+  float topology = texture(u_TopologyTex, sphereUV).r;
+  float bathymetry = texture(u_BathymetryTex, sphereUV).r;
 
   if (bathymetry > BATHYMETRY_CUTOFF) {
     float waterDepth = depthFromBathymetryTexValue(bathymetry);

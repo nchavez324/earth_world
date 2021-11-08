@@ -24,6 +24,10 @@ std::uintptr_t const KEY_PRESS_RIGHT = 5;
 std::uintptr_t const KEY_RELEASE_RIGHT = 6;
 std::uintptr_t const KEY_PRESS_LEFT = 7;
 std::uintptr_t const KEY_RELEASE_LEFT = 8;
+std::uintptr_t const KEY_PRESS_ZOOM_IN = 9;
+std::uintptr_t const KEY_RELEASE_ZOOM_IN = 10;
+std::uintptr_t const KEY_PRESS_ZOOM_OUT = 11;
+std::uintptr_t const KEY_RELEASE_ZOOM_OUT = 12;
 
 int const kGlobeVerticesPerEdge = 100;
 PN_stdfloat const kAxesScale = 40.f;
@@ -31,13 +35,19 @@ PN_stdfloat const kGlobeScale = 20.f;
 PN_stdfloat const kGlobeWaterSurfaceHeight = 0.95f;
 PN_stdfloat const kBoatScale = 0.05f;
 PN_stdfloat const kBoatSpeed = 0.07f;
-PN_stdfloat const kCameraDistance = 7.f;
+PN_stdfloat const kCameraDistanceMin = 7.f;
+PN_stdfloat const kCameraDistanceMax = 20.f;
+PN_stdfloat const kCameraZoomSpeed = 5.f;
+LColor const kClearColor(0, 0, 0, 1);
 
-LVector2 g_inputAxis = LVector2::zero();
+LVector3 g_inputAxis = LVector3::zero();
 LPoint3 g_boatSphericalCoords(0, 0, 1);
 PN_stdfloat g_boatHeading = 0.f;
+PN_stdfloat g_cameraDistance = kCameraDistanceMin;
+NodePath g_globe;
 NodePath g_boat;
 NodePath g_camera;
+NodePath g_visibilityCompute("VisibilityCompute");
 ClockObject *g_clock = ClockObject::get_global_clock();
 WindowFramework *g_window = nullptr;
 
@@ -47,7 +57,7 @@ LQuaternion rotationBetweenVectors(const LVector3 &v1, const LVector3 &v2);
 LQuaternion rotationLookAt(const LVector3 &forward, const LVector3 &up);
 LPoint3 sphericalCoordsFromCartesian(const LPoint3 &coords);
 LPoint3 cartesianCoordsFromSpherical(const LPoint3 &coords);
-NodePath generateGlobeNode(GraphicsWindow *window, int verticesPerEdge);
+NodePath generateGlobeNode(int verticesPerEdge);
 NodePath generateAxesNode();
 AsyncTask::DoneStatus onFrameTask(GenericAsyncTask *task, void *_);
 void onKeyChanged(const Event *event, void *_);
@@ -151,7 +161,7 @@ LPoint3 cartesianCoordsFromSpherical(const LPoint3 &coords) {
                  coords.get_z() * sinf(coords.get_y()));
 }
 
-NodePath generateGlobeNode(GraphicsWindow *window, int verticesPerEdge) {
+NodePath generateGlobeNode(int verticesPerEdge) {
   // Among the most important is the fact that arrays of types are not
   // necessarily tightly packed. An array of floats in such a block will not be
   // the equivalent to an array of floats in C/C++. The array stride (the bytes
@@ -205,18 +215,31 @@ NodePath generateGlobeNode(GraphicsWindow *window, int verticesPerEdge) {
   node->add_geom(geom);
   node->set_bounds_type(BoundingVolume::BT_box);
 
+  PT<Texture> visibilityTexture = new Texture("VisibilityTexture");
+  visibilityTexture->setup_2d_texture(2048, 1024, Texture::T_float,
+                                      Texture::F_rgba32);
+  LColor clear_color(0, 0, 0, 0);
+  visibilityTexture->set_clear_color(clear_color);
+
   PT<Texture> topologyTexture = TexturePool::load_texture(
       "../../../../Downloads/topology/topology_2048x1024.png");
   PT<Texture> bathymetryTexture = TexturePool::load_texture(
       "../../../../Downloads/bathymetry/bathymetry_2048x1024.png");
   PT<Texture> albedoTexture = TexturePool::load_texture(
       "../../../../Downloads/albedo/1_2048x1024.png");
-  PT(TextureStage) topologyStage = new TextureStage("TopologyStage");
-  PT(TextureStage) bathymetryStage = new TextureStage("BathymetryStage");
-  PT(TextureStage) albedoStage = new TextureStage("AlbedoStage");
+  PT<Texture> incognitaTexture =
+      TexturePool::load_texture("../../../../Downloads/albedo/paper.jpeg");
+  PT<TextureStage> topologyStage = new TextureStage("TopologyStage");
+  PT<TextureStage> bathymetryStage = new TextureStage("BathymetryStage");
+  PT<TextureStage> albedoStage = new TextureStage("AlbedoStage");
+  PT<TextureStage> visibilityStage = new TextureStage("VisibilityStage");
+  PT<TextureStage> incognitaStage = new TextureStage("IncognitaStage");
   topologyTexture->set_wrap_u(SamplerState::WM_repeat);
   bathymetryTexture->set_wrap_u(SamplerState::WM_repeat);
   albedoTexture->set_wrap_u(SamplerState::WM_repeat);
+  visibilityTexture->set_wrap_u(SamplerState::WM_repeat);
+  incognitaTexture->set_wrap_u(SamplerState::WM_repeat);
+  incognitaTexture->set_wrap_v(SamplerState::WM_repeat);
 
   PT<Shader> materialShader =
       Shader::load(Shader::SL_GLSL, "../../simple.vert", "../../simple.frag");
@@ -225,22 +248,36 @@ NodePath generateGlobeNode(GraphicsWindow *window, int verticesPerEdge) {
   globe.set_texture(topologyStage, topologyTexture, /* priority= */ 0);
   globe.set_texture(bathymetryStage, bathymetryTexture, /* priority= */ 1);
   globe.set_texture(albedoStage, albedoTexture, /* priority= */ 2);
-  globe.set_shader_input("VertexBuffer", vertexBuffer);
+  globe.set_texture(visibilityStage, visibilityTexture, /* priority= */ 3);
+  globe.set_texture(incognitaStage, incognitaTexture, /* priority= */ 4);
+  globe.set_shader_input("u_VertexBuffer", vertexBuffer);
 
-  PT<Shader> computeShader =
-      Shader::load_compute(Shader::SL_GLSL, "../../compute.comp");
-  NodePath compute("compute");
-  compute.set_shader(computeShader);
-  compute.set_shader_input("VerticesPerEdge", LVector2i(verticesPerEdge, 0));
-  compute.set_shader_input("VertexBuffer", vertexBuffer);
-  compute.set_shader_input("TopologyTex", topologyTexture);
-  compute.set_shader_input("BathymetryTex", bathymetryTexture);
+  // Run one off position vertices compute shader.
+  PT<Shader> positionVerticesShader =
+      Shader::load_compute(Shader::SL_GLSL, "../../positionVertices.comp");
+  NodePath positionVertices("PositionVerticesCompute");
+  positionVertices.set_shader(positionVerticesShader);
+  positionVertices.set_shader_input("u_VerticesPerEdge",
+                                    LVector2i(verticesPerEdge, 0));
+  positionVertices.set_shader_input("u_VertexBuffer", vertexBuffer);
+  positionVertices.set_shader_input("u_TopologyTex", topologyTexture);
+  positionVertices.set_shader_input("u_BathymetryTex", bathymetryTexture);
   CPT<ShaderAttrib> attributes =
-      DCAST(ShaderAttrib, compute.get_attrib(ShaderAttrib::get_class_type()));
-
-  LVector3i work_groups(verticesPerEdge, verticesPerEdge, faceCount);
+      DCAST(ShaderAttrib,
+            positionVertices.get_attrib(ShaderAttrib::get_class_type()));
+  LVector3i work_groups(
+    static_cast<int>(std::ceil(verticesPerEdge / 16.0)),
+    static_cast<int>(std::ceil(verticesPerEdge / 16.0)),
+    faceCount);
   GraphicsEngine *engine = GraphicsEngine::get_global_ptr();
-  engine->dispatch_compute(work_groups, attributes, window->get_gsg());
+  engine->dispatch_compute(work_groups, attributes,
+                           g_window->get_graphics_window()->get_gsg());
+
+  // Set up recurring shader to update visibility mask.
+  PT<Shader> visibilityShader =
+      Shader::load_compute(Shader::SL_GLSL, "../../updateVisibility.comp");
+  g_visibilityCompute.set_shader(visibilityShader);
+  g_visibilityCompute.set_shader_input("u_VisibilityTex", visibilityTexture);
 
   return globe;
 }
@@ -301,7 +338,7 @@ AsyncTask::DoneStatus onFrameTask(GenericAsyncTask *task, void *_) {
   LVector3 cameraRight = cameraXform->get_quat().get_right();
   LVector3 cameraUp = cameraXform->get_quat().get_up();
   LVector3 cameraBack = -cameraXform->get_quat().get_forward();
-  LVector2 normalizedInput = g_inputAxis.normalized();
+  LVector2 normalizedInput = g_inputAxis.get_xy().normalized();
   LVector3 heading =
       (cameraRight * g_inputAxis.get_x()) + (cameraUp * g_inputAxis.get_y());
   heading.normalize();
@@ -314,6 +351,16 @@ AsyncTask::DoneStatus onFrameTask(GenericAsyncTask *task, void *_) {
   LVector3 newBoatUnitSphericalPosition =
       sphericalCoordsFromCartesian(newBoatUnitPosition);
   g_boatSphericalCoords = newBoatUnitSphericalPosition;
+
+  g_visibilityCompute.set_shader_input("u_PlayerSphericalCoords",
+                                       g_boatSphericalCoords);
+  CPT<ShaderAttrib> attributes =
+      DCAST(ShaderAttrib,
+            g_visibilityCompute.get_attrib(ShaderAttrib::get_class_type()));
+  LVector3i work_groups(2048 / 16, 1024 / 16, 1);
+  GraphicsEngine *engine = GraphicsEngine::get_global_ptr();
+  engine->dispatch_compute(work_groups, attributes,
+                           g_window->get_graphics_window()->get_gsg());
 
   // 4. Convert it into the world position.
   LVector3 newBoatPosition =
@@ -340,9 +387,16 @@ AsyncTask::DoneStatus onFrameTask(GenericAsyncTask *task, void *_) {
   LQuaternion newRotation = rotationLookAt(boatHeading, newBoatUnitPosition);
   g_boat.set_quat(newRotation);
 
-  // 7. Float the camera above the boat and look at it.
+  // 7. Update the camera distance.
+  PN_stdfloat cameraDistanceDelta =
+      g_inputAxis.get_z() * g_clock->get_dt() * kCameraZoomSpeed;
+  g_cameraDistance = std::max(
+      kCameraDistanceMin,
+      std::min(kCameraDistanceMax, g_cameraDistance + cameraDistanceDelta));
+
+  // 8. Float the camera above the boat and look at it.
   LVector3 newCameraPosition =
-      newBoatPosition + (kCameraDistance * newBoatUnitPosition);
+      newBoatPosition + (g_cameraDistance * newBoatUnitPosition);
   LQuaternion newCameraRotation =
       rotationLookAt(-newBoatUnitPosition, LVector3::up());
   g_camera.set_pos(newCameraPosition);
@@ -370,6 +424,14 @@ void onKeyChanged(const Event *event, void *userData) {
     case KEY_RELEASE_RIGHT:
       g_inputAxis.set_x(std::max(-1.f, g_inputAxis.get_x() - 1));
       break;
+    case KEY_PRESS_ZOOM_IN:
+    case KEY_RELEASE_ZOOM_OUT:
+      g_inputAxis.set_z(std::max(-1.f, g_inputAxis.get_z() - 1));
+      break;
+    case KEY_PRESS_ZOOM_OUT:
+    case KEY_RELEASE_ZOOM_IN:
+      g_inputAxis.set_z(std::min(1.f, g_inputAxis.get_z() + 1));
+      break;
     default:
       return;
   }
@@ -394,16 +456,15 @@ int main(int argc, char *argv[]) {
   int flags = GraphicsPipe::BF_require_window;
   g_window = framework.open_window(windowProperties, flags);
   g_window->enable_keyboard();
+  g_window->get_display_region_3d()->set_clear_color(kClearColor);
 
   NodePath axes = generateAxesNode();
   axes.reparent_to(g_window->get_render());
   axes.set_scale(kAxesScale);
 
-  NodePath globe =
-      generateGlobeNode(g_window->get_graphics_window(),
-                        /* verticesPerEdge= */ kGlobeVerticesPerEdge);
-  globe.reparent_to(g_window->get_render());
-  globe.set_scale(kGlobeScale);
+  g_globe = generateGlobeNode(/* verticesPerEdge= */ kGlobeVerticesPerEdge);
+  g_globe.reparent_to(g_window->get_render());
+  g_globe.set_scale(kGlobeScale);
 
   g_boat = g_window->load_model(framework.get_models(),
                                 "../../../../Downloads/boat/S_Boat.bam");
@@ -411,7 +472,7 @@ int main(int argc, char *argv[]) {
   g_boat.set_scale(kBoatScale);
 
   g_camera = g_window->get_camera_group();
-  g_camera.set_pos((kGlobeScale + kCameraDistance) * LVector3::right());
+  g_camera.set_pos((kGlobeScale + g_cameraDistance) * LVector3::right());
   g_camera.set_quat(rotationLookAt(LVector3::left(), LVector3::up()));
 
   PT<GenericAsyncTask> frameTask =
@@ -450,6 +511,14 @@ int main(int argc, char *argv[]) {
                        reinterpret_cast<void *>(KEY_PRESS_LEFT));
   framework.define_key("arrow_left-up", "Left released", &onKeyChanged,
                        reinterpret_cast<void *>(KEY_RELEASE_LEFT));
+  framework.define_key("q", "Zoom out pressed", &onKeyChanged,
+                       reinterpret_cast<void *>(KEY_PRESS_ZOOM_OUT));
+  framework.define_key("q-up", "Zoom out released", &onKeyChanged,
+                       reinterpret_cast<void *>(KEY_RELEASE_ZOOM_OUT));
+  framework.define_key("e", "Zoom in pressed", &onKeyChanged,
+                       reinterpret_cast<void *>(KEY_PRESS_ZOOM_IN));
+  framework.define_key("e-up", "Zoom in released", &onKeyChanged,
+                       reinterpret_cast<void *>(KEY_RELEASE_ZOOM_IN));
 
   framework.main_loop();
   framework.close_framework();

@@ -4,7 +4,7 @@
 uniform mat4 p3d_ModelViewProjectionMatrix;
 
 // Vertex inputs
-layout(std430) buffer VertexBuffer {
+layout(std430) buffer u_VertexBuffer {
   vec3 positions[];
 };
 

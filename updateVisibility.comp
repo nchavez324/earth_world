@@ -1,0 +1,32 @@
+#version 430
+
+#pragma include "common.glsl"
+
+layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+uniform vec3 u_PlayerSphericalCoords;
+uniform writeonly layout(rgba32f) image2D u_VisibilityTex;
+
+void main() {
+  ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
+  ivec2 texSize = imageSize(u_VisibilityTex);
+  vec2 pixelUV = vec2(
+    gl_GlobalInvocationID.x / float(texSize.x),
+    gl_GlobalInvocationID.y / float(texSize.y));
+  vec2 playerUV = vec2(
+    u_PlayerSphericalCoords.x / TWO_PI,
+    (u_PlayerSphericalCoords.y / PI) + 0.5);
+  float distFromPlayer = length(pixelUV - playerUV);
+  float newVisibility =
+      1 - clamp((distFromPlayer * 1.0 /
+                 (VISIBILITY_FADE_END - VISIBILITY_FADE_START)) -
+                    VISIBILITY_FADE_START,
+                0, 1);
+
+  // Always returning 0? :(
+  // float existingVisibility = imageLoad(u_VisibilityTex, pixel).r;
+  // vec4 newColor = vec4(max(existingVisibility, newVisibility));
+  // imageStore(u_VisibilityTexW, pixel, newColor);
+  vec4 newColor = vec4(newVisibility);
+  imageStore(u_VisibilityTex, pixel, newColor);
+}

@@ -8,6 +8,10 @@
 // ~0.83, increasing in height until sea level at 1.
 #define BATHYMETRY_CUTOFF 0.83
 
+// The fade for sight visibility around the boat.
+#define VISIBILITY_FADE_START 0.04
+#define VISIBILITY_FADE_END 0.05
+
 vec3 sphericalCoordsFromCartesian(vec3 coords) {
   // Panda3D is right-hand z-up, and world coords are still in Panda coords
   vec3 spherical = vec3(0, 0, 0);
