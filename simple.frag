@@ -27,5 +27,4 @@ void main() {
   // There's a black halo around the land because the bathymetry texture isn't
   // perfect.
   p3d_FragColor = bathymetry > BATHYMETRY_CUTOFF ? waterColor : landColor;
-  }
 }

@@ -31,7 +31,7 @@ PN_stdfloat const kGlobeScale = 20.f;
 PN_stdfloat const kGlobeWaterSurfaceHeight = 0.95f;
 PN_stdfloat const kBoatScale = 0.05f;
 PN_stdfloat const kBoatSpeed = 0.07f;
-PN_stdfloat const kCameraDistance = 6.f;
+PN_stdfloat const kCameraDistance = 7.f;
 
 LVector2 g_inputAxis = LVector2::zero();
 LPoint3 g_boatSphericalCoords(0, 0, 1);

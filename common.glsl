@@ -6,7 +6,7 @@
 
 // The bathymetry texture has land around 0, then the Marianas Trench at around
 // ~0.83, increasing in height until sea level at 1.
-#define BATHYMETRY_CUTOFF 0.835
+#define BATHYMETRY_CUTOFF 0.83
 
 vec3 sphericalCoordsFromCartesian(vec3 coords) {
   // Panda3D is right-hand z-up, and world coords are still in Panda coords
