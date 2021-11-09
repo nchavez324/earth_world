@@ -53,7 +53,7 @@ void main() {
   float topology = texture(u_TopologyTex, sphereUV).r;
   float bathymetry = texture(u_BathymetryTex, sphereUV).r;
 
-  if (bathymetry > BATHYMETRY_CUTOFF) {
+  if (bathymetry > u_BathymetryCutoff) {
     float waterDepth = depthFromBathymetryTexValue(bathymetry);
     magnitude = mix(0.95, 0.94, waterDepth);
   } else {

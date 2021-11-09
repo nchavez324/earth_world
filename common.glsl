@@ -6,7 +6,7 @@
 
 // The bathymetry texture has land around 0, then the Marianas Trench at around
 // ~0.83, increasing in height until sea level at 1.
-#define BATHYMETRY_CUTOFF 0.83
+uniform float u_BathymetryCutoff;
 
 // The fade for sight visibility around the boat.
 #define VISIBILITY_FADE_START 0.07
@@ -65,9 +65,9 @@ float inverseMix(float from, float to, float value) {
 float depthFromBathymetryTexValue(float value) {
   // The bathymetry texture has land around 0, then the Marianas Trench at
   // around ~0.83, increasing in height until sea level at 1.
-  if (value > BATHYMETRY_CUTOFF) {
-    return 1 -
-           inverseMix(BATHYMETRY_CUTOFF, 1, clamp(value, BATHYMETRY_CUTOFF, 1));
+  if (value > u_BathymetryCutoff) {
+    return 1 - inverseMix(u_BathymetryCutoff, 1,
+                          clamp(value, u_BathymetryCutoff, 1));
   } else {
     return 0;
   }

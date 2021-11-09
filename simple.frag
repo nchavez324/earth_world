@@ -30,6 +30,6 @@ void main() {
   vec4 incognitaColor = texture(p3d_Texture4, 4 * uv);
   // There's a black halo around the land because the bathymetry texture isn't
   // perfect.
-  vec4 earthColor = bathymetry > BATHYMETRY_CUTOFF ? waterColor : landColor;
+  vec4 earthColor = bathymetry > u_BathymetryCutoff ? waterColor : landColor;
   p3d_FragColor = mix(incognitaColor, earthColor, visibility);
 }

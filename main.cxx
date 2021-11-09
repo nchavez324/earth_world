@@ -30,9 +30,16 @@ std::uintptr_t const KEY_PRESS_ZOOM_OUT = 11;
 std::uintptr_t const KEY_RELEASE_ZOOM_OUT = 12;
 
 int const kGlobeVerticesPerEdge = 100;
+LVector2i kTextureSize(2048, 1024);
+// LVector2i kTextureSize(16384, 8192);
+std::string kModelDirectory("/home/nick/Downloads");
+std::string kTextureDirectory("/home/nick/Downloads");
+std::string kShaderDirectory("/home/nick/src/earth_world");
+std::string kConfigFilepath("/home/nick/src/earth_world/config.prc");
 PN_stdfloat const kAxesScale = 40.f;
 PN_stdfloat const kGlobeScale = 20.f;
 PN_stdfloat const kGlobeWaterSurfaceHeight = 0.95f;
+PN_stdfloat const kBathymetryCutoff = 0.83f;
 PN_stdfloat const kBoatScale = 0.05f;
 PN_stdfloat const kBoatSpeed = 0.07f;
 PN_stdfloat const kCameraDistanceMin = 7.f;
@@ -50,6 +57,7 @@ NodePath g_camera;
 NodePath g_visibilityCompute("VisibilityCompute");
 ClockObject *g_clock = ClockObject::get_global_clock();
 WindowFramework *g_window = nullptr;
+PNMImage g_bathymetryImage;
 
 PN_stdfloat clamp(PN_stdfloat value, PN_stdfloat min, PN_stdfloat max);
 LQuaternion quatFromOrthonormalMatrix(const LMatrix3 &a);
@@ -59,6 +67,7 @@ LPoint3 sphericalCoordsFromCartesian(const LPoint3 &coords);
 LPoint3 cartesianCoordsFromSpherical(const LPoint3 &coords);
 NodePath generateGlobeNode(int verticesPerEdge);
 NodePath generateAxesNode();
+bool isLandTest(const LVecBase2 &sphericalCoords);
 AsyncTask::DoneStatus onFrameTask(GenericAsyncTask *task, void *_);
 void onKeyChanged(const Event *event, void *_);
 
@@ -225,25 +234,33 @@ NodePath generateGlobeNode(int verticesPerEdge) {
   LoaderOptions options;
   options.set_texture_flags(LoaderOptions::TF_float);
   PT<Texture> topologyTexture = TexturePool::load_texture(
-      "../../../../Downloads/topology/topology_2048x1024.png",
+      kTextureDirectory + "/topology/topology_" +
+          std::to_string(kTextureSize.get_x()) + "x" +
+          std::to_string(kTextureSize.get_y()) + ".png",
       /* primaryFileNumChannels= */ 1, /* readMipmaps= */ false, options);
   topologyTexture->set_format(Texture::F_red);
   topologyTexture->set_wrap_u(SamplerState::WM_repeat);
 
   PT<Texture> bathymetryTexture = TexturePool::load_texture(
-      "../../../../Downloads/bathymetry/bathymetry_2048x1024.png",
+      kTextureDirectory + "/bathymetry/bathymetry_" +
+      std::to_string(kTextureSize.get_x()) + "x" +
+      std::to_string(kTextureSize.get_y()) + ".png",
       /* primaryFileNumChannels= */ 1, /* readMipmaps= */ false, options);
   bathymetryTexture->set_format(Texture::F_red);
   bathymetryTexture->set_wrap_u(SamplerState::WM_repeat);
 
+  g_bathymetryImage.read(kTextureDirectory +
+                         "/bathymetry/bathymetry_2048x1024.png");
+
   PT<Texture> albedoTexture = TexturePool::load_texture(
-      "../../../../Downloads/albedo/1_2048x1024.png",
+      kTextureDirectory + "/albedo/1_" + std::to_string(kTextureSize.get_x()) +
+          "x" + std::to_string(kTextureSize.get_y()) + ".png",
       /* primaryFileNumChannels= */ 3, /* readMipmaps= */ false, options);
   albedoTexture->set_wrap_u(SamplerState::WM_repeat);
   albedoTexture->set_format(Texture::F_rgb);
 
   PT<Texture> incognitaTexture = TexturePool::load_texture(
-      "../../../../Downloads/albedo/paper.jpeg",
+      kTextureDirectory + "/albedo/paper.jpeg",
       /* primaryFileNumChannels= */ 3, /* readMipmaps= */ false, options);
   incognitaTexture->set_format(Texture::F_rgb);
   incognitaTexture->set_wrap_u(SamplerState::WM_repeat);
@@ -256,7 +273,8 @@ NodePath generateGlobeNode(int verticesPerEdge) {
   PT<TextureStage> incognitaStage = new TextureStage("IncognitaStage");
 
   PT<Shader> materialShader =
-      Shader::load(Shader::SL_GLSL, "../../simple.vert", "../../simple.frag");
+      Shader::load(Shader::SL_GLSL, kShaderDirectory + "/simple.vert",
+                   kShaderDirectory + "/simple.frag");
   NodePath globe(node);
   globe.set_shader(materialShader);
   globe.set_texture(topologyStage, topologyTexture, /* priority= */ 0);
@@ -265,14 +283,17 @@ NodePath generateGlobeNode(int verticesPerEdge) {
   globe.set_texture(visibilityStage, visibilityTexture, /* priority= */ 3);
   globe.set_texture(incognitaStage, incognitaTexture, /* priority= */ 4);
   globe.set_shader_input("u_VertexBuffer", vertexBuffer);
+  globe.set_shader_input("u_BathymetryCutoff", LVector2(kBathymetryCutoff, 0));
 
   // Run one off position vertices compute shader.
-  PT<Shader> positionVerticesShader =
-      Shader::load_compute(Shader::SL_GLSL, "../../positionVertices.comp");
+  PT<Shader> positionVerticesShader = Shader::load_compute(
+      Shader::SL_GLSL, kShaderDirectory + "/positionVertices.comp");
   NodePath positionVertices("PositionVerticesCompute");
   positionVertices.set_shader(positionVerticesShader);
   positionVertices.set_shader_input("u_VerticesPerEdge",
                                     LVector2i(verticesPerEdge, 0));
+  positionVertices.set_shader_input("u_BathymetryCutoff",
+                                    LVector2(kBathymetryCutoff, 0));
   positionVertices.set_shader_input("u_VertexBuffer", vertexBuffer);
   positionVertices.set_shader_input("u_TopologyTex", topologyTexture);
   positionVertices.set_shader_input("u_BathymetryTex", bathymetryTexture);
@@ -289,7 +310,7 @@ NodePath generateGlobeNode(int verticesPerEdge) {
 
   // Set up recurring shader to update visibility mask.
   PT<Shader> visibilityShader =
-      Shader::load_compute(Shader::SL_GLSL, "../../updateVisibility.comp");
+      Shader::load_compute(Shader::SL_GLSL, kShaderDirectory + "/updateVisibility.comp");
   g_visibilityCompute.set_shader(visibilityShader);
   g_visibilityCompute.set_shader_input("u_VisibilityTex", visibilityTexture);
 
@@ -346,6 +367,22 @@ NodePath generateAxesNode() {
   return nodePath;
 }
 
+/** True if the point is on land. */
+bool isLandTest(const LVecBase2 &sphericalCoords) {
+  LPoint2i pixel = LPoint2i(
+      static_cast<int>(g_bathymetryImage.get_x_size() *
+                       sphericalCoords.get_x() / (2 * MathNumbers::pi)),
+      static_cast<int>(g_bathymetryImage.get_y_size() *
+                       ((-sphericalCoords.get_y() / MathNumbers::pi) + 0.5)));
+  pixel.set_x(std::max(0, pixel.get_x()));
+  pixel.set_y(std::max(0, pixel.get_y()));
+  pixel.set_x(std::min(g_bathymetryImage.get_x_size() - 1, pixel.get_x()));
+  pixel.set_y(std::min(g_bathymetryImage.get_y_size() - 1, pixel.get_y()));
+  PN_stdfloat bathymetry =
+      g_bathymetryImage.get_bright(pixel.get_x(), pixel.get_y());
+  return bathymetry <= 0.83;
+}
+
 AsyncTask::DoneStatus onFrameTask(GenericAsyncTask *task, void *_) {
   // 1. Determine the velocity, by using the input in the camera's basis.
   CPT<TransformState> cameraXform = g_camera.get_net_transform();
@@ -359,13 +396,28 @@ AsyncTask::DoneStatus onFrameTask(GenericAsyncTask *task, void *_) {
   LVector3 positionDelta = heading * kBoatSpeed * g_clock->get_dt();
 
   // 2. Update the boat's position in cartesian space and snap onto sphere.
+  LVector3 oldBoatUnitPosition =
+      cartesianCoordsFromSpherical(g_boatSphericalCoords);
   LVector3 newBoatUnitPosition =
-      (cartesianCoordsFromSpherical(g_boatSphericalCoords) + positionDelta)
-          .normalized();
+      (oldBoatUnitPosition + positionDelta).normalized();
   LVector3 newBoatUnitSphericalPosition =
       sphericalCoordsFromCartesian(newBoatUnitPosition);
-  g_boatSphericalCoords = newBoatUnitSphericalPosition;
+  LVector3 oldBoatPosition =
+      kGlobeWaterSurfaceHeight * kGlobeScale * oldBoatUnitPosition;
+  LVector3 newBoatPosition =
+      kGlobeWaterSurfaceHeight * kGlobeScale * newBoatUnitPosition;
 
+  // 1.5. See if intended destination would be land, and withhold update if so.
+  if (isLandTest(newBoatUnitSphericalPosition.get_xy())) {
+    newBoatUnitPosition = oldBoatUnitPosition;
+    newBoatUnitSphericalPosition = g_boatSphericalCoords;
+    newBoatPosition = oldBoatPosition;
+  } else {
+    g_boatSphericalCoords = newBoatUnitSphericalPosition;
+    g_boat.set_pos(newBoatPosition);
+  }
+
+  // Update the visible range.
   g_visibilityCompute.set_shader_input("u_PlayerSphericalCoords",
                                        g_boatSphericalCoords);
   CPT<ShaderAttrib> attributes =
@@ -376,10 +428,6 @@ AsyncTask::DoneStatus onFrameTask(GenericAsyncTask *task, void *_) {
   engine->dispatch_compute(work_groups, attributes,
                            g_window->get_graphics_window()->get_gsg());
 
-  // 4. Convert it into the world position.
-  LVector3 newBoatPosition =
-      kGlobeWaterSurfaceHeight * kGlobeScale * newBoatUnitPosition;
-  g_boat.set_pos(newBoatPosition);
 
   // 5. Update the heading if the input was non zero.
   if (!IS_NEARLY_ZERO(g_inputAxis.get_x()) ||
@@ -452,7 +500,7 @@ void onKeyChanged(const Event *event, void *userData) {
 }
 
 int main(int argc, char *argv[]) {
-  load_prc_file("../../config.prc");
+  load_prc_file(kConfigFilepath);
   if (PStatClient::is_connected()) {
     PStatClient::disconnect();
   }
@@ -481,7 +529,7 @@ int main(int argc, char *argv[]) {
   g_globe.set_scale(kGlobeScale);
 
   g_boat = g_window->load_model(framework.get_models(),
-                                "../../../../Downloads/boat/S_Boat.bam");
+                                kModelDirectory + "/boat/S_Boat.bam");
   g_boat.reparent_to(g_window->get_render());
   g_boat.set_scale(kBoatScale);
 
