@@ -29,8 +29,12 @@ std::uintptr_t const KEY_RELEASE_ZOOM_IN = 10;
 std::uintptr_t const KEY_PRESS_ZOOM_OUT = 11;
 std::uintptr_t const KEY_RELEASE_ZOOM_OUT = 12;
 
+bool const kEnableLandCollision = true;
+bool const kEnableDebugAxes = true;
 int const kGlobeVerticesPerEdge = 100;
 LVector2i kTextureSize(2048, 1024);
+// bool const kEnableDebugAxes = false;
+// int const kGlobeVerticesPerEdge = 300;
 // LVector2i kTextureSize(16384, 8192);
 std::string kModelDirectory("/home/nick/Downloads");
 std::string kTextureDirectory("/home/nick/Downloads");
@@ -225,8 +229,10 @@ NodePath generateGlobeNode(int verticesPerEdge) {
   node->set_bounds_type(BoundingVolume::BT_box);
 
   PT<Texture> visibilityTexture = new Texture("VisibilityTexture");
+  // To save you some headache, just trying r8 or r16 doesn't work. It appears
+  // that when it passes to the fragment shader, it chokes trying to interpret.
   visibilityTexture->setup_2d_texture(2048, 1024, Texture::T_float,
-                                      Texture::F_red);
+                                      Texture::F_rg16);
   LColor clear_color(0, 0, 0, 0);
   visibilityTexture->set_clear_color(clear_color);
   visibilityTexture->set_wrap_u(SamplerState::WM_repeat);
@@ -309,8 +315,8 @@ NodePath generateGlobeNode(int verticesPerEdge) {
                            g_window->get_graphics_window()->get_gsg());
 
   // Set up recurring shader to update visibility mask.
-  PT<Shader> visibilityShader =
-      Shader::load_compute(Shader::SL_GLSL, kShaderDirectory + "/updateVisibility.comp");
+  PT<Shader> visibilityShader = Shader::load_compute(
+      Shader::SL_GLSL, kShaderDirectory + "/updateVisibility.comp");
   g_visibilityCompute.set_shader(visibilityShader);
   g_visibilityCompute.set_shader_input("u_VisibilityTex", visibilityTexture);
 
@@ -369,6 +375,9 @@ NodePath generateAxesNode() {
 
 /** True if the point is on land. */
 bool isLandTest(const LVecBase2 &sphericalCoords) {
+  if (!kEnableLandCollision) {
+    return false;
+  }
   LPoint2i pixel = LPoint2i(
       static_cast<int>(g_bathymetryImage.get_x_size() *
                        sphericalCoords.get_x() / (2 * MathNumbers::pi)),
@@ -531,9 +540,11 @@ int main(int argc, char *argv[]) {
   g_window->enable_keyboard();
   g_window->get_display_region_3d()->set_clear_color(kClearColor);
 
-  NodePath axes = generateAxesNode();
-  axes.reparent_to(g_window->get_render());
-  axes.set_scale(kAxesScale);
+  if (kEnableDebugAxes) {
+    NodePath axes = generateAxesNode();
+    axes.reparent_to(g_window->get_render());
+    axes.set_scale(kAxesScale);
+  }
 
   g_globe = generateGlobeNode(/* verticesPerEdge= */ kGlobeVerticesPerEdge);
   g_globe.reparent_to(g_window->get_render());

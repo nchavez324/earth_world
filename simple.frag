@@ -22,7 +22,8 @@ void main() {
   float topology = texture(p3d_Texture0, uv).r;
   float bathymetry = texture(p3d_Texture1, uv).r;
   vec3 albedo = texture(p3d_Texture2, uv).rgb;
-  float visibility = texture(p3d_Texture3, uv).r;
+  float totalVisibility = texture(p3d_Texture3, uv).r;
+  float immediateVisibility = texture(p3d_Texture3, uv).g;
 
   float waterDepth = depthFromBathymetryTexValue(bathymetry);
   vec4 waterColor = mix(vec4(0, 0.5, 1, 1), vec4(0, 0, 0.5, 1), waterDepth);
@@ -30,6 +31,10 @@ void main() {
   vec4 incognitaColor = texture(p3d_Texture4, 4 * uv);
   // There's a black halo around the land because the bathymetry texture isn't
   // perfect.
-  vec4 earthColor = bathymetry > u_BathymetryCutoff ? waterColor : landColor;
-  p3d_FragColor = mix(incognitaColor, earthColor, visibility);
+  vec4 trueEarthColor =
+      bathymetry > u_BathymetryCutoff ? waterColor : landColor;
+  vec4 obscuredEarthColor = mix(trueEarthColor, incognitaColor, 0.5);
+  vec4 incongitaEarthColor =
+      mix(incognitaColor, obscuredEarthColor, totalVisibility);
+  p3d_FragColor = mix(incongitaEarthColor, trueEarthColor, immediateVisibility);
 }

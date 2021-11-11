@@ -1,5 +1,7 @@
 #pragma once
 
+#define FLOAT_MAX 3.402823466e+38
+
 #define PI_OVER_TWO 1.570796327
 #define PI 3.1415926538
 #define TWO_PI 6.283185308
@@ -50,6 +52,7 @@ float unitSphereDistance(vec2 s1, vec2 s2) {
   float dotProduct = dot(v1, v2);
   // acos starts going haywire when the vectors are really close together.
   // TODO: estimate a better metric than this.
+  if (dotProduct <= 0.00001) return FLOAT_MAX;
   if (dotProduct >= 0.99999) return 0;
   return acos(dotProduct);
 }

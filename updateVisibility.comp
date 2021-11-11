@@ -5,28 +5,29 @@
 layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 
 uniform vec3 u_PlayerSphericalCoords;
-uniform writeonly layout(r8) image2D u_VisibilityTex;
+uniform layout(rg16f) image2D u_VisibilityTex;
 
 void main() {
   ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
   ivec2 texSize = imageSize(u_VisibilityTex);
-  vec2 pixelUV = vec2(
-    gl_GlobalInvocationID.x / float(texSize.x),
-    gl_GlobalInvocationID.y / float(texSize.y));
-
+  if (pixel.x >= texSize.x || pixel.y >= texSize.y) {
+    return;
+  }
+  vec2 pixelUV = vec2(pixel.x / float(texSize.x), pixel.y / float(texSize.y));
   vec2 pixelUnitSpherical = vec2(pixelUV.x * TWO_PI, (pixelUV.y - 0.5) * PI);
   float distFromPlayer =
       unitSphereDistance(pixelUnitSpherical, u_PlayerSphericalCoords.xy);
 
-  float newVisibility =
+  float immediateVisibility =
       1 - inverseMix(VISIBILITY_FADE_START, VISIBILITY_FADE_END,
                      clamp(distFromPlayer, VISIBILITY_FADE_START,
                            VISIBILITY_FADE_END));
 
-  // Always returning 0? :(
-  // float existingVisibility = imageLoad(u_VisibilityTex, pixel).r;
-  // vec4 newColor = vec4(max(existingVisibility, newVisibility));
-  // imageStore(u_VisibilityTexW, pixel, newColor);
-  vec4 newColor = vec4(newVisibility);
+  float existingVisibility = imageLoad(u_VisibilityTex, pixel).r;
+  vec4 newColor = vec4(
+    max(existingVisibility, immediateVisibility),
+    immediateVisibility,
+    0,
+    1);
   imageStore(u_VisibilityTex, pixel, newColor);
 }
