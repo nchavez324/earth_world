@@ -55,8 +55,8 @@ NodePath g_globe;
 NodePath g_boat;
 NodePath g_camera;
 NodePath g_visibilityCompute("VisibilityCompute");
-ClockObject *g_clock = ClockObject::get_global_clock();
-WindowFramework *g_window = nullptr;
+PT<ClockObject> g_clock = ClockObject::get_global_clock();
+PT<WindowFramework> g_window = nullptr;
 PNMImage g_bathymetryImage;
 
 PN_stdfloat clamp(PN_stdfloat value, PN_stdfloat min, PN_stdfloat max);
@@ -304,7 +304,7 @@ NodePath generateGlobeNode(int verticesPerEdge) {
     static_cast<int>(std::ceil(verticesPerEdge / 16.0)),
     static_cast<int>(std::ceil(verticesPerEdge / 16.0)),
     faceCount);
-  GraphicsEngine *engine = GraphicsEngine::get_global_ptr();
+  PT<GraphicsEngine> engine = GraphicsEngine::get_global_ptr();
   engine->dispatch_compute(work_groups, attributes,
                            g_window->get_graphics_window()->get_gsg());
 
@@ -384,6 +384,19 @@ bool isLandTest(const LVecBase2 &sphericalCoords) {
 }
 
 AsyncTask::DoneStatus onFrameTask(GenericAsyncTask *task, void *_) {
+  PT<GraphicsEngine> engine = GraphicsEngine::get_global_ptr();
+  if (g_window.is_null() || g_clock.is_null() || engine.is_null()) {
+    return AsyncTask::DS_exit;
+  }
+  PT<GraphicsWindow> graphicsWindow = g_window->get_graphics_window();
+  if (graphicsWindow.is_null()) {
+    return AsyncTask::DS_exit;
+  }
+  PT<GraphicsStateGuardian> graphicsStateGuardian = graphicsWindow->get_gsg();
+  if (graphicsStateGuardian.is_null()) {
+    return AsyncTask::DS_exit;
+  }
+
   // 1. Determine the velocity, by using the input in the camera's basis.
   CPT<TransformState> cameraXform = g_camera.get_net_transform();
   LVector3 cameraRight = cameraXform->get_quat().get_right();
@@ -424,9 +437,7 @@ AsyncTask::DoneStatus onFrameTask(GenericAsyncTask *task, void *_) {
       DCAST(ShaderAttrib,
             g_visibilityCompute.get_attrib(ShaderAttrib::get_class_type()));
   LVector3i work_groups(2048 / 16, 1024 / 16, 1);
-  GraphicsEngine *engine = GraphicsEngine::get_global_ptr();
-  engine->dispatch_compute(work_groups, attributes,
-                           g_window->get_graphics_window()->get_gsg());
+  engine->dispatch_compute(work_groups, attributes, graphicsStateGuardian);
 
 
   // 5. Update the heading if the input was non zero.
