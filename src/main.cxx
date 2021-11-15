@@ -30,20 +30,17 @@ std::uintptr_t const KEY_PRESS_ZOOM_OUT = 11;
 std::uintptr_t const KEY_RELEASE_ZOOM_OUT = 12;
 
 bool const kEnableLandCollision = true;
-bool const kEnableDebugAxes = true;
+bool const kEnableDebugAxes = false;
 int const kGlobeVerticesPerEdge = 100;
-LVector2i kTextureSize(2048, 1024);
-// bool const kEnableDebugAxes = false;
-// int const kGlobeVerticesPerEdge = 300;
-// LVector2i kTextureSize(16384, 8192);
-std::string kModelDirectory("/home/nick/Downloads");
-std::string kTextureDirectory("/home/nick/Downloads");
-std::string kShaderDirectory("/home/nick/src/earth_world");
+LVector2i kTextureSize(16384, 8192);
+std::string kModelDirectory("/home/nick/src/earth_world/models");
+std::string kTextureDirectory("/home/nick/src/earth_world/textures");
+std::string kShaderDirectory("/home/nick/src/earth_world/shaders");
 std::string kConfigFilepath("/home/nick/src/earth_world/config.prc");
 PN_stdfloat const kAxesScale = 40.f;
 PN_stdfloat const kGlobeScale = 20.f;
 PN_stdfloat const kGlobeWaterSurfaceHeight = 0.95f;
-PN_stdfloat const kBathymetryCutoff = 0.83f;
+PN_stdfloat const kLandMaskCutoff = 0.5f;
 PN_stdfloat const kBoatScale = 0.05f;
 PN_stdfloat const kBoatSpeed = 0.07f;
 PN_stdfloat const kCameraDistanceMin = 7.f;
@@ -61,7 +58,7 @@ NodePath g_camera;
 NodePath g_visibilityCompute("VisibilityCompute");
 PT<ClockObject> g_clock = ClockObject::get_global_clock();
 PT<WindowFramework> g_window = nullptr;
-PNMImage g_bathymetryImage;
+PNMImage g_landMaskImage;
 
 PN_stdfloat clamp(PN_stdfloat value, PN_stdfloat min, PN_stdfloat max);
 LQuaternion quatFromOrthonormalMatrix(const LMatrix3 &a);
@@ -240,33 +237,40 @@ NodePath generateGlobeNode(int verticesPerEdge) {
   LoaderOptions options;
   options.set_texture_flags(LoaderOptions::TF_float);
   PT<Texture> topologyTexture = TexturePool::load_texture(
-      kTextureDirectory + "/topology/topology_" +
-          std::to_string(kTextureSize.get_x()) + "x" +
-          std::to_string(kTextureSize.get_y()) + ".png",
+      kTextureDirectory + "/topology_" + std::to_string(kTextureSize.get_x()) +
+          "x" + std::to_string(kTextureSize.get_y()) + ".png",
       /* primaryFileNumChannels= */ 1, /* readMipmaps= */ false, options);
   topologyTexture->set_format(Texture::F_red);
   topologyTexture->set_wrap_u(SamplerState::WM_repeat);
 
   PT<Texture> bathymetryTexture = TexturePool::load_texture(
-      kTextureDirectory + "/bathymetry/bathymetry_" +
-      std::to_string(kTextureSize.get_x()) + "x" +
-      std::to_string(kTextureSize.get_y()) + ".png",
+      kTextureDirectory + "/bathymetry_" +
+          std::to_string(kTextureSize.get_x()) + "x" +
+          std::to_string(kTextureSize.get_y()) + ".png",
       /* primaryFileNumChannels= */ 1, /* readMipmaps= */ false, options);
   bathymetryTexture->set_format(Texture::F_red);
   bathymetryTexture->set_wrap_u(SamplerState::WM_repeat);
 
-  g_bathymetryImage.read(kTextureDirectory +
-                         "/bathymetry/bathymetry_2048x1024.png");
+  PT<Texture> landMaskTexture = TexturePool::load_texture(
+      kTextureDirectory + "/land_mask_" + std::to_string(kTextureSize.get_x()) +
+          "x" + std::to_string(kTextureSize.get_y()) + ".png",
+      /* primaryFileNumChannels= */ 1, /* readMipmaps= */ false, options);
+  landMaskTexture->set_format(Texture::F_red);
+  landMaskTexture->set_wrap_u(SamplerState::WM_repeat);
+
+  g_landMaskImage.read(kTextureDirectory + "/land_mask_" +
+                       std::to_string(kTextureSize.get_x()) + "x" +
+                       std::to_string(kTextureSize.get_y()) + ".png");
 
   PT<Texture> albedoTexture = TexturePool::load_texture(
-      kTextureDirectory + "/albedo/1_" + std::to_string(kTextureSize.get_x()) +
-          "x" + std::to_string(kTextureSize.get_y()) + ".png",
+      kTextureDirectory + "/albedo_" + std::to_string(kTextureSize.get_x()) +
+          "x" + std::to_string(kTextureSize.get_y()) + "_1.png",
       /* primaryFileNumChannels= */ 3, /* readMipmaps= */ false, options);
   albedoTexture->set_wrap_u(SamplerState::WM_repeat);
   albedoTexture->set_format(Texture::F_rgb);
 
   PT<Texture> incognitaTexture = TexturePool::load_texture(
-      kTextureDirectory + "/albedo/paper.jpeg",
+      kTextureDirectory + "/paper.jpeg",
       /* primaryFileNumChannels= */ 3, /* readMipmaps= */ false, options);
   incognitaTexture->set_format(Texture::F_rgb);
   incognitaTexture->set_wrap_u(SamplerState::WM_repeat);
@@ -274,6 +278,7 @@ NodePath generateGlobeNode(int verticesPerEdge) {
 
   PT<TextureStage> topologyStage = new TextureStage("TopologyStage");
   PT<TextureStage> bathymetryStage = new TextureStage("BathymetryStage");
+  PT<TextureStage> landMaskStage = new TextureStage("LandMaskStage");
   PT<TextureStage> albedoStage = new TextureStage("AlbedoStage");
   PT<TextureStage> visibilityStage = new TextureStage("VisibilityStage");
   PT<TextureStage> incognitaStage = new TextureStage("IncognitaStage");
@@ -285,11 +290,12 @@ NodePath generateGlobeNode(int verticesPerEdge) {
   globe.set_shader(materialShader);
   globe.set_texture(topologyStage, topologyTexture, /* priority= */ 0);
   globe.set_texture(bathymetryStage, bathymetryTexture, /* priority= */ 1);
-  globe.set_texture(albedoStage, albedoTexture, /* priority= */ 2);
-  globe.set_texture(visibilityStage, visibilityTexture, /* priority= */ 3);
-  globe.set_texture(incognitaStage, incognitaTexture, /* priority= */ 4);
+  globe.set_texture(landMaskStage, landMaskTexture, /* priority= */ 2);
+  globe.set_texture(albedoStage, albedoTexture, /* priority= */ 3);
+  globe.set_texture(visibilityStage, visibilityTexture, /* priority= */ 4);
+  globe.set_texture(incognitaStage, incognitaTexture, /* priority= */ 5);
   globe.set_shader_input("u_VertexBuffer", vertexBuffer);
-  globe.set_shader_input("u_BathymetryCutoff", LVector2(kBathymetryCutoff, 0));
+  globe.set_shader_input("u_LandMaskCutoff", LVector2(kLandMaskCutoff, 0));
 
   // Run one off position vertices compute shader.
   PT<Shader> positionVerticesShader = Shader::load_compute(
@@ -298,18 +304,18 @@ NodePath generateGlobeNode(int verticesPerEdge) {
   positionVertices.set_shader(positionVerticesShader);
   positionVertices.set_shader_input("u_VerticesPerEdge",
                                     LVector2i(verticesPerEdge, 0));
-  positionVertices.set_shader_input("u_BathymetryCutoff",
-                                    LVector2(kBathymetryCutoff, 0));
+  positionVertices.set_shader_input("u_LandMaskCutoff",
+                                    LVector2(kLandMaskCutoff, 0));
   positionVertices.set_shader_input("u_VertexBuffer", vertexBuffer);
   positionVertices.set_shader_input("u_TopologyTex", topologyTexture);
   positionVertices.set_shader_input("u_BathymetryTex", bathymetryTexture);
+  positionVertices.set_shader_input("u_LandMaskTex", landMaskTexture);
   CPT<ShaderAttrib> attributes =
       DCAST(ShaderAttrib,
             positionVertices.get_attrib(ShaderAttrib::get_class_type()));
-  LVector3i work_groups(
-    static_cast<int>(std::ceil(verticesPerEdge / 16.0)),
-    static_cast<int>(std::ceil(verticesPerEdge / 16.0)),
-    faceCount);
+  LVector3i work_groups(static_cast<int>(std::ceil(verticesPerEdge / 16.0)),
+                        static_cast<int>(std::ceil(verticesPerEdge / 16.0)),
+                        faceCount);
   PT<GraphicsEngine> engine = GraphicsEngine::get_global_ptr();
   engine->dispatch_compute(work_groups, attributes,
                            g_window->get_graphics_window()->get_gsg());
@@ -379,17 +385,17 @@ bool isLandTest(const LVecBase2 &sphericalCoords) {
     return false;
   }
   LPoint2i pixel = LPoint2i(
-      static_cast<int>(g_bathymetryImage.get_x_size() *
-                       sphericalCoords.get_x() / (2 * MathNumbers::pi)),
-      static_cast<int>(g_bathymetryImage.get_y_size() *
+      static_cast<int>(g_landMaskImage.get_x_size() * sphericalCoords.get_x() /
+                       (2 * MathNumbers::pi)),
+      static_cast<int>(g_landMaskImage.get_y_size() *
                        ((-sphericalCoords.get_y() / MathNumbers::pi) + 0.5)));
   pixel.set_x(std::max(0, pixel.get_x()));
   pixel.set_y(std::max(0, pixel.get_y()));
-  pixel.set_x(std::min(g_bathymetryImage.get_x_size() - 1, pixel.get_x()));
-  pixel.set_y(std::min(g_bathymetryImage.get_y_size() - 1, pixel.get_y()));
-  PN_stdfloat bathymetry =
-      g_bathymetryImage.get_bright(pixel.get_x(), pixel.get_y());
-  return bathymetry <= 0.83;
+  pixel.set_x(std::min(g_landMaskImage.get_x_size() - 1, pixel.get_x()));
+  pixel.set_y(std::min(g_landMaskImage.get_y_size() - 1, pixel.get_y()));
+  PN_stdfloat landMaskSample =
+      g_landMaskImage.get_bright(pixel.get_x(), pixel.get_y());
+  return landMaskSample <= kLandMaskCutoff;
 }
 
 AsyncTask::DoneStatus onFrameTask(GenericAsyncTask *task, void *_) {
@@ -447,7 +453,6 @@ AsyncTask::DoneStatus onFrameTask(GenericAsyncTask *task, void *_) {
             g_visibilityCompute.get_attrib(ShaderAttrib::get_class_type()));
   LVector3i work_groups(2048 / 16, 1024 / 16, 1);
   engine->dispatch_compute(work_groups, attributes, graphicsStateGuardian);
-
 
   // 5. Update the heading if the input was non zero.
   if (!IS_NEARLY_ZERO(g_inputAxis.get_x()) ||

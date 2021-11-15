@@ -10,6 +10,7 @@ layout(std430) buffer u_VertexBuffer {
 uniform uint u_VerticesPerEdge;
 uniform sampler2D u_TopologyTex;
 uniform sampler2D u_BathymetryTex;
+uniform sampler2D u_LandMaskTex;
 
 void main() {
   if (gl_GlobalInvocationID.x >= u_VerticesPerEdge ||
@@ -52,9 +53,10 @@ void main() {
   vec2 sphereUV = sphericalUVFromCartesian(spherePosition);
   float topology = texture(u_TopologyTex, sphereUV).r;
   float bathymetry = texture(u_BathymetryTex, sphereUV).r;
+  float landMask = texture(u_LandMaskTex, sphereUV).r;
 
-  if (bathymetry > u_BathymetryCutoff) {
-    float waterDepth = depthFromBathymetryTexValue(bathymetry);
+  if (landMask > u_LandMaskCutoff) {
+    float waterDepth = 1 - bathymetry;
     magnitude = mix(0.95, 0.94, waterDepth);
   } else {
     magnitude = mix(0.95, 1, topology);

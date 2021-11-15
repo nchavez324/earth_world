@@ -28,7 +28,7 @@ CCFLAGS_RELEASE = [
 
 env = Environment()
 env.Program('main',
-    Glob('*.cxx'),
+    Glob('src/*.cxx'),
     CCFLAGS=[
         '-fPIC',
         '-std=gnu++11',
