@@ -24,6 +24,7 @@ class SpherePoint3 : public LVecBase3 {
   SpherePoint3() = default;
   SpherePoint3(PN_stdfloat azimuthal, PN_stdfloat polar, PN_stdfloat radial)
       : LVecBase3(azimuthal, polar, radial) {}
+  SpherePoint3(SpherePoint2 &unit_point, PN_stdfloat radial);
 
   PN_stdfloat get_azimuthal() const { return get_x(); }
   PN_stdfloat get_polar() const { return get_y(); }
@@ -74,6 +75,9 @@ class SpherePoint2 : public LVecBase2 {
    * @return The corresponding spherical coordinates.
    */
   static SpherePoint2 fromCartesian(const LVecBase3 &cartesian);
+
+  static SpherePoint2 fromLatitudeAndLongitude(PN_stdfloat latitude,
+                                               PN_stdfloat longitude);
 };
 
 }  // namespace earth_world

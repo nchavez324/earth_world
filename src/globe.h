@@ -46,11 +46,13 @@ class Globe : public ReferenceCount {
    * @param graphics_engine The engine rendering the globe.
    * @param graphics_state_guardian The graphics state guardian responsible for
    *     the globe.
+   * @param city_prefab The model to use to instantiate all others.
    * @param vertices_per_edge The number of vertices to use for each edge of the
    *     sphere-cube used for the globe's topology.
    */
   static PT<Globe> build(PT<GraphicsEngine> graphics_engine,
                          PT<GraphicsStateGuardian> graphics_state_guardian,
+                         NodePath city_prefab,
                          int vertices_per_edge);
 
  protected:
@@ -96,6 +98,9 @@ class Globe : public ReferenceCount {
 
   /** Creates the texture used for keeping track of what's visible. */
   static PT<Texture> buildVisibilityTexture(LVector2i texture_size);
+
+  /** Samples the intensity of the image at the given point. */
+  static PN_stdfloat sampleImage(PNMImage &image, LPoint2 UV);
 };
 
 }  // namespace earth_world

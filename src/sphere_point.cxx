@@ -2,6 +2,9 @@
 
 namespace earth_world {
 
+SpherePoint3::SpherePoint3(SpherePoint2 &unit_point, PN_stdfloat radial)
+    : LVecBase3(unit_point.get_azimuthal(), unit_point.get_polar(), radial) {}
+
 SpherePoint2 SpherePoint3::toUnit() const {
   return SpherePoint2(get_azimuthal(), get_polar());
 }
@@ -42,6 +45,12 @@ LVecBase2 SpherePoint2::toUV() const {
 
 SpherePoint2 SpherePoint2::fromCartesian(const LVecBase3 &cartesian) {
   return SpherePoint3::fromCartesian(cartesian).toUnit();
+}
+
+SpherePoint2 SpherePoint2::fromLatitudeAndLongitude(PN_stdfloat latitude,
+                                                    PN_stdfloat longitude) {
+  return SpherePoint2(((longitude + 180.f) / 180.f) * MathNumbers::pi,
+                      (latitude / 180.f) * MathNumbers::pi);
 }
 
 }  // namespace earth_world

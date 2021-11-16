@@ -1,5 +1,6 @@
 #include "globe.h"
 
+#include "city.h"
 #include "filename.h"
 #include "panda3d/aa_luse.h"
 #include "panda3d/boundingBox.h"
@@ -21,15 +22,29 @@
 #include "panda3d/texture.h"
 #include "panda3d/texturePool.h"
 #include "panda3d/textureStage.h"
+#include "quaternion.h"
 #include "typedefs.h"
 
 namespace earth_world {
 
 bool const kEnableLandCollision = true;
+PN_stdfloat const kCityScale = 0.005f;
 LVector2i kMainTexSize(16384, 8192);
 LVector2i kIncognitaTexSize(3000, 3000);
 LVector2i kVisibilityTexSize(2048, 1024);
 PN_stdfloat const kLandMaskCutoff = 0.5f;
+
+int const kCityCount = 4;
+City const kCities[] = {
+    City("New York", "USA",
+         SpherePoint2::fromLatitudeAndLongitude(40.712776f, -74.005974)),
+    City("Bogota", "Colombia",
+         SpherePoint2::fromLatitudeAndLongitude(4.710989f, -74.072090f)),
+    City("Honolulu", "USA",
+         SpherePoint2::fromLatitudeAndLongitude(21.309919f, -157.858154f)),
+    City("Lisbon", "Portugal",
+         SpherePoint2::fromLatitudeAndLongitude(38.685108f, -9.238115f)),
+};
 
 Globe::Globe(NodePath path, NodePath visibility_compute_path,
              PNMImage land_mask_image)
@@ -41,17 +56,8 @@ bool Globe::isLandAtPoint(SpherePoint2 point) {
   if (!kEnableLandCollision) {
     return false;
   }
-  LPoint2 pixelUV = point.toUV();
-  LPoint2i pixel = LPoint2i(
-      static_cast<int>(land_mask_image_.get_x_size() * pixelUV.get_x()),
-      static_cast<int>(land_mask_image_.get_y_size() * pixelUV.get_y()));
-  pixel.set_x(std::max(0, pixel.get_x()));
-  pixel.set_y(std::max(0, pixel.get_y()));
-  pixel.set_x(std::min(land_mask_image_.get_x_size() - 1, pixel.get_x()));
-  pixel.set_y(std::min(land_mask_image_.get_y_size() - 1, pixel.get_y()));
-  PN_stdfloat sample =
-      land_mask_image_.get_bright(pixel.get_x(), pixel.get_y());
-  return sample <= kLandMaskCutoff;
+  PN_stdfloat land_mask_sample = sampleImage(land_mask_image_, point.toUV());
+  return land_mask_sample <= kLandMaskCutoff;
 }
 
 void Globe::updateVisibility(PT<GraphicsEngine> graphics_engine,
@@ -69,7 +75,7 @@ void Globe::updateVisibility(PT<GraphicsEngine> graphics_engine,
 
 PT<Globe> Globe::build(PT<GraphicsEngine> graphics_engine,
                        PT<GraphicsStateGuardian> graphics_state_guardian,
-                       int vertices_per_edge) {
+                       NodePath city_prefab, int vertices_per_edge) {
   PT<Texture> topology_tex =
       loadTexture("topology", kMainTexSize, Texture::F_red);
   PT<Texture> bathymetry_tex =
@@ -85,24 +91,25 @@ PT<Globe> Globe::build(PT<GraphicsEngine> graphics_engine,
   // Load another copy of the land mask for the CPU to use in collision
   // detection.
   PNMImage land_mask_image;
-  land_mask_image.read(filename::forTexture(
-      "land_mask_" + std::to_string(kMainTexSize.get_x()) + "x" +
-      std::to_string(kMainTexSize.get_y()) + ".png"));
+  land_mask_tex->store(land_mask_image);
+  // Load another copy of the topology to place the cities.
+  PNMImage topology_image;
+  topology_tex->store(topology_image);
 
   PT<Shader> material_shader =
       Shader::load(Shader::SL_GLSL, filename::forShader("simple.vert"),
                    filename::forShader("simple.frag"));
-  NodePath path =
+  NodePath globe_path =
       buildGeometry(graphics_engine, graphics_state_guardian, topology_tex,
                     bathymetry_tex, land_mask_tex, vertices_per_edge);
-  path.set_shader(material_shader);
-  path.set_shader_input("u_LandMaskCutoff", LVector2(kLandMaskCutoff, 0));
-  setTextureStage(path, topology_tex, /* prio= */ 0);
-  setTextureStage(path, bathymetry_tex, /* prio= */ 1);
-  setTextureStage(path, land_mask_tex, /* prio= */ 2);
-  setTextureStage(path, albedo_tex, /* prio= */ 3);
-  setTextureStage(path, visibility_tex, /* prio= */ 4);
-  setTextureStage(path, incognita_tex, /* prio= */ 5);
+  globe_path.set_shader(material_shader);
+  globe_path.set_shader_input("u_LandMaskCutoff", LVector2(kLandMaskCutoff, 0));
+  setTextureStage(globe_path, topology_tex, /* prio= */ 0);
+  setTextureStage(globe_path, bathymetry_tex, /* prio= */ 1);
+  setTextureStage(globe_path, land_mask_tex, /* prio= */ 2);
+  setTextureStage(globe_path, albedo_tex, /* prio= */ 3);
+  setTextureStage(globe_path, visibility_tex, /* prio= */ 4);
+  setTextureStage(globe_path, incognita_tex, /* prio= */ 5);
 
   // Set up recurring shader to update visibility mask.
   NodePath visibility_compute_path("VisibilityCompute");
@@ -111,7 +118,32 @@ PT<Globe> Globe::build(PT<GraphicsEngine> graphics_engine,
   visibility_compute_path.set_shader(visibility_shader);
   visibility_compute_path.set_shader_input("u_VisibilityTex", visibility_tex);
 
-  PT<Globe> globe = new Globe(path, visibility_compute_path, land_mask_image);
+  NodePath root_path("GlobeRoot");
+  globe_path.reparent_to(root_path);
+
+  // Place cities on the globe.
+  for (int i = 0; i < kCityCount; i++) {
+    const City &city = kCities[i];
+    SpherePoint2 city_unit_sphere_position = city.getLocation();
+    PN_stdfloat topology_sample =
+        sampleImage(topology_image, city_unit_sphere_position.toUV());
+    PN_stdfloat city_height = (topology_sample * (1.f - 0.95f)) + 0.95f;
+    SpherePoint3 city_sphere_position =
+        SpherePoint3(city_unit_sphere_position, city_height);
+
+    LVector3 city_unit_position = city_unit_sphere_position.toCartesian();
+    LVector3 city_tangent = city_unit_position.cross(LVector3::up());
+    LQuaternion city_rotation =
+        quaternion::fromLookAt(city_tangent, city_unit_position);
+
+    NodePath city_path = city_prefab.copy_to(root_path);
+    city_path.set_pos(city_sphere_position.toCartesian());
+    city_path.set_quat(city_rotation);
+    city_path.set_scale(kCityScale);
+  }
+
+  PT<Globe> globe =
+      new Globe(root_path, visibility_compute_path, land_mask_image);
   return globe;
 }
 
@@ -199,10 +231,10 @@ NodePath Globe::buildGeometry(PT<GraphicsEngine> graphics_engine,
 
   // Send the vertex buffer to the material shader to pull the vertices for
   // rendering.
-  NodePath path(node);
-  path.set_shader_input("u_VertexBuffer", vertex_buffer);
+  NodePath globe_path(node);
+  globe_path.set_shader_input("u_VertexBuffer", vertex_buffer);
 
-  return path;
+  return globe_path;
 }
 
 void Globe::setTextureStage(NodePath path, PT<Texture> texture, int priority) {
@@ -261,6 +293,16 @@ PT<Texture> Globe::buildVisibilityTexture(LVector2i texture_size) {
   visibility_texture->set_clear_color(clear_color);
   visibility_texture->set_wrap_u(SamplerState::WM_repeat);
   return visibility_texture;
+}
+
+PN_stdfloat Globe::sampleImage(PNMImage &image, LPoint2 UV) {
+  LPoint2i pixel = LPoint2i(static_cast<int>(image.get_x_size() * UV.get_x()),
+                            static_cast<int>(image.get_y_size() * UV.get_y()));
+  pixel.set_x(std::max(0, pixel.get_x()));
+  pixel.set_y(std::max(0, pixel.get_y()));
+  pixel.set_x(std::min(image.get_x_size() - 1, pixel.get_x()));
+  pixel.set_y(std::min(image.get_y_size() - 1, pixel.get_y()));
+  return image.get_bright(pixel.get_x(), pixel.get_y());
 }
 
 }  // namespace earth_world

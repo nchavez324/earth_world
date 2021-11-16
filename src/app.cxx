@@ -74,7 +74,9 @@ App::App(int argc, char *argv[])
     axes.set_scale(kAxesScale);
   }
 
-  globe_ = Globe::build(graphics_engine_, graphics_state_guardian_,
+  NodePath city_prefab = window_->load_model(
+      framework_.get_models(), filename::forModel("city/S_City.bam"));
+  globe_ = Globe::build(graphics_engine_, graphics_state_guardian_, city_prefab,
                         kGlobeVerticesPerEdge);
   globe_->getPath().reparent_to(window_->get_render());
   globe_->getPath().set_scale(kGlobeScale);
