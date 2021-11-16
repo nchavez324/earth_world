@@ -1,5 +1,5 @@
-#ifndef QUATERNION_UTILS_H
-#define QUATERNION_UTILS_H
+#ifndef EARTH_WORLD_QUATERNION_H
+#define EARTH_WORLD_QUATERNION_H
 
 #include "panda3d/aa_luse.h"
 
@@ -35,4 +35,4 @@ LQuaternion fromLookAt(const LVector3 &forward, const LVector3 &up);
 }  // namespace quaternion
 }  // namespace earth_world
 
-#endif  // QUATERNION_UTILS_H
+#endif  // EARTH_WORLD_QUATERNION_H

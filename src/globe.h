@@ -1,5 +1,5 @@
-#ifndef GLOBE_H
-#define GLOBE_H
+#ifndef EARTH_WORLD_GLOBE_H
+#define EARTH_WORLD_GLOBE_H
 
 #include "panda3d/aa_luse.h"
 #include "panda3d/geomNode.h"
@@ -75,4 +75,4 @@ class Globe : public ReferenceCount {
 
 }  // namespace earth_world
 
-#endif  // GLOBE_H
+#endif  // EARTH_WORLD_GLOBE_H

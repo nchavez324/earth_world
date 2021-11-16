@@ -1,5 +1,5 @@
-#ifndef TYPEDEFS_H
-#define TYPEDEFS_H
+#ifndef EARTH_WORLD_TYPEDEFS_H
+#define EARTH_WORLD_TYPEDEFS_H
 
 namespace earth_world {
 /** Typedefs to shorthand Panda3D types. */
@@ -11,4 +11,4 @@ using CPT = ConstPointerTo<T>;
 
 }  // namespace earth_world
 
-#endif  // TYPEDEFS_H
+#endif  // EARTH_WORLD_TYPEDEFS_H

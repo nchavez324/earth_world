@@ -1,5 +1,5 @@
-#ifndef APP_H
-#define APP_H
+#ifndef EARTH_WORLD_APP_H
+#define EARTH_WORLD_APP_H
 
 #include "globe.h"
 #include "panda3d/asyncTask.h"
@@ -107,4 +107,4 @@ class App {
 };
 }  // namespace earth_world
 
-#endif  // APP_H
+#endif  // EARTH_WORLD_APP_H

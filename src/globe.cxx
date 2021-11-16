@@ -1,14 +1,15 @@
 #include "globe.h"
 
+#include "filename.h"
 #include "panda3d/aa_luse.h"
 #include "panda3d/boundingBox.h"
 #include "panda3d/boundingVolume.h"
-#include "panda3d/geom.h"
 #include "panda3d/computeNode.h"
+#include "panda3d/geom.h"
 #include "panda3d/geomNode.h"
 #include "panda3d/geomTriangles.h"
-#include "panda3d/geomVertexFormat.h"
 #include "panda3d/geomVertexData.h"
+#include "panda3d/geomVertexFormat.h"
 #include "panda3d/graphicsEngine.h"
 #include "panda3d/loaderOptions.h"
 #include "panda3d/mathNumbers.h"
@@ -25,8 +26,6 @@
 namespace earth_world {
 
 bool const kEnableLandCollision = true;
-std::string kTextureDirectory("/home/nick/src/earth_world/textures");
-std::string kShaderDirectory("/home/nick/src/earth_world/shaders");
 LVector2i kTextureSize(16384, 8192);
 PN_stdfloat const kLandMaskCutoff = 0.5f;
 
@@ -122,7 +121,7 @@ PT<Globe> Globe::build(PT<GraphicsEngine> graphics_engine,
   PT<GeomNode> node = new GeomNode("Globe");
   node->add_geom(geom);
   node->set_bounds_type(BoundingVolume::BT_box);
-  
+
   PT<Texture> visibility_texture = new Texture("VisibilityTexture");
   // To save you some headache, just trying r8 or r16 doesn't work. It appears
   // that when it passes to the fragment shader, it chokes trying to interpret.
@@ -135,41 +134,42 @@ PT<Globe> Globe::build(PT<GraphicsEngine> graphics_engine,
   LoaderOptions options;
   options.set_texture_flags(LoaderOptions::TF_float);
   PT<Texture> topology_texture = TexturePool::load_texture(
-      kTextureDirectory + "/topology_" + std::to_string(kTextureSize.get_x()) +
-          "x" + std::to_string(kTextureSize.get_y()) + ".png",
+      filename::forTexture("topology_" + std::to_string(kTextureSize.get_x()) +
+                           "x" + std::to_string(kTextureSize.get_y()) + ".png"),
       /* primaryFileNumChannels= */ 1, /* readMipmaps= */ false, options);
   topology_texture->set_format(Texture::F_red);
   topology_texture->set_wrap_u(SamplerState::WM_repeat);
 
   PT<Texture> bathymetry_texture = TexturePool::load_texture(
-      kTextureDirectory + "/bathymetry_" +
-          std::to_string(kTextureSize.get_x()) + "x" +
-          std::to_string(kTextureSize.get_y()) + ".png",
+      filename::forTexture("bathymetry_" +
+                           std::to_string(kTextureSize.get_x()) + "x" +
+                           std::to_string(kTextureSize.get_y()) + ".png"),
       /* primaryFileNumChannels= */ 1, /* readMipmaps= */ false, options);
   bathymetry_texture->set_format(Texture::F_red);
   bathymetry_texture->set_wrap_u(SamplerState::WM_repeat);
 
   PT<Texture> land_mask_texture = TexturePool::load_texture(
-      kTextureDirectory + "/land_mask_" + std::to_string(kTextureSize.get_x()) +
-          "x" + std::to_string(kTextureSize.get_y()) + ".png",
+      filename::forTexture("land_mask_" + std::to_string(kTextureSize.get_x()) +
+                           "x" + std::to_string(kTextureSize.get_y()) + ".png"),
       /* primaryFileNumChannels= */ 1, /* readMipmaps= */ false, options);
   land_mask_texture->set_format(Texture::F_red);
   land_mask_texture->set_wrap_u(SamplerState::WM_repeat);
 
   PNMImage land_mask_image;
-  land_mask_image.read(kTextureDirectory + "/land_mask_" +
-                              std::to_string(kTextureSize.get_x()) + "x" +
-                              std::to_string(kTextureSize.get_y()) + ".png");
+  land_mask_image.read(filename::forTexture(
+      "land_mask_" + std::to_string(kTextureSize.get_x()) + "x" +
+      std::to_string(kTextureSize.get_y()) + ".png"));
 
   PT<Texture> albedo_texture = TexturePool::load_texture(
-      kTextureDirectory + "/albedo_" + std::to_string(kTextureSize.get_x()) +
-          "x" + std::to_string(kTextureSize.get_y()) + "_1.png",
+      filename::forTexture("albedo_" + std::to_string(kTextureSize.get_x()) +
+                           "x" + std::to_string(kTextureSize.get_y()) +
+                           "_1.png"),
       /* primaryFileNumChannels= */ 3, /* readMipmaps= */ false, options);
   albedo_texture->set_wrap_u(SamplerState::WM_repeat);
   albedo_texture->set_format(Texture::F_rgb);
 
   PT<Texture> incognita_texture = TexturePool::load_texture(
-      kTextureDirectory + "/paper.jpeg",
+      filename::forTexture("paper.jpeg"),
       /* primaryFileNumChannels= */ 3, /* readMipmaps= */ false, options);
   incognita_texture->set_format(Texture::F_rgb);
   incognita_texture->set_wrap_u(SamplerState::WM_repeat);
@@ -183,8 +183,8 @@ PT<Globe> Globe::build(PT<GraphicsEngine> graphics_engine,
   PT<TextureStage> incongnita_stage = new TextureStage("IncognitaStage");
 
   PT<Shader> material_shader =
-      Shader::load(Shader::SL_GLSL, kShaderDirectory + "/simple.vert",
-                   kShaderDirectory + "/simple.frag");
+      Shader::load(Shader::SL_GLSL, filename::forShader("simple.vert"),
+                   filename::forShader("simple.frag"));
 
   NodePath path(node);
   path.set_shader(material_shader);
@@ -199,7 +199,7 @@ PT<Globe> Globe::build(PT<GraphicsEngine> graphics_engine,
 
   // Run one off position vertices compute shader.
   PT<Shader> position_vertices_shader = Shader::load_compute(
-      Shader::SL_GLSL, kShaderDirectory + "/positionVertices.comp");
+      Shader::SL_GLSL, filename::forShader("positionVertices.comp"));
   NodePath position_vertices("PositionVerticesCompute");
   position_vertices.set_shader(position_vertices_shader);
   position_vertices.set_shader_input("u_VerticesPerEdge",
@@ -222,7 +222,7 @@ PT<Globe> Globe::build(PT<GraphicsEngine> graphics_engine,
   // Set up recurring shader to update visibility mask.
   NodePath visibility_compute_path("VisibilityCompute");
   PT<Shader> visibility_shader = Shader::load_compute(
-      Shader::SL_GLSL, kShaderDirectory + "/updateVisibility.comp");
+      Shader::SL_GLSL, filename::forShader("updateVisibility.comp"));
   visibility_compute_path.set_shader(visibility_shader);
   visibility_compute_path.set_shader_input("u_VisibilityTex",
                                            visibility_texture);

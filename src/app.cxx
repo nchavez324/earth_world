@@ -1,6 +1,7 @@
 #include "app.h"
 
 #include "debug_axes.h"
+#include "filename.h"
 #include "globe.h"
 #include "panda3d/asyncTaskManager.h"
 #include "panda3d/boundingBox.h"
@@ -26,9 +27,7 @@ namespace earth_world {
 bool const kEnableDebugAxes = false;
 int const kGlobeVerticesPerEdge = 100;
 LVector2i const kWindowSizeInitial(800, 600);
-std::string kModelDirectory("/home/nick/src/earth_world/models");
 std::string const kWindowTitle("Earth World");
-std::string const kConfigFilepath("/home/nick/src/earth_world/config.prc");
 PN_stdfloat const kAxesScale = 40.f;
 PN_stdfloat const kGlobeScale = 20.f;
 PN_stdfloat const kGlobeWaterSurfaceHeight = 0.95f;
@@ -45,7 +44,7 @@ App::App(int argc, char *argv[])
       camera_distance_(kCameraDistanceMin),
       boat_unit_sphere_position_(/* azimuthal= */ 0, /* polar= */ 0),
       boat_heading_(0.f) {
-  load_prc_file(kConfigFilepath);
+  load_prc_file(filename::kConfigFilename);
 
   if (PStatClient::is_connected()) {
     PStatClient::disconnect();
@@ -81,7 +80,7 @@ App::App(int argc, char *argv[])
   globe_->getPath().set_scale(kGlobeScale);
 
   boat_path_ = window_->load_model(framework_.get_models(),
-                                   kModelDirectory + "/boat/S_Boat.bam");
+                                   filename::forModel("boat/S_Boat.bam"));
   boat_path_.reparent_to(window_->get_render());
   boat_path_.set_scale(kBoatScale);
 

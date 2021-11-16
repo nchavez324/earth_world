@@ -1,5 +1,5 @@
-#ifndef SPHERE_POINT_H
-#define SPHERE_POINT_H
+#ifndef EARTH_WORLD_SPHERE_POINT_H
+#define EARTH_WORLD_SPHERE_POINT_H
 
 #include "panda3d/aa_luse.h"
 
@@ -78,4 +78,4 @@ class SpherePoint2 : public LVecBase2 {
 
 }  // namespace earth_world
 
-#endif  // SPHERE_POINT_H
+#endif  // EARTH_WORLD_SPHERE_POINT_H

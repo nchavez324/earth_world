@@ -1,5 +1,5 @@
-#ifndef DEBUG_AXES_H
-#define DEBUG_AXES_H
+#ifndef EARTH_WORLD_DEBUG_AXES_H
+#define EARTH_WORLD_DEBUG_AXES_H
 
 #include "panda3d/nodePath.h"
 
@@ -12,4 +12,4 @@ NodePath build();
 }  // namespace debug_axes
 }  // namespace earth_world
 
-#endif  // DEBUG_AXES_H
+#endif  // EARTH_WORLD_DEBUG_AXES_H
