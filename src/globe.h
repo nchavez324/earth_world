@@ -9,6 +9,7 @@
 #include "panda3d/pandaNode.h"
 #include "panda3d/pnmImage.h"
 #include "panda3d/referenceCount.h"
+#include "sphere_point.h"
 #include "typedefs.h"
 
 namespace earth_world {
@@ -19,23 +20,23 @@ class Globe : public ReferenceCount {
   Globe() = delete;
 
   /**
-   * Tests whether there is land at a given spherical coordinate.
-   * @param spherical_coords The coordinate to test.
-   * @return True if the given coordinate represents a point on land.
+   * Tests whether there is land at the given unit sphere point.
+   * @param point The point to test.
+   * @return True if the given point rests on land.
    */
-  bool isLandAtCoords(const LVecBase2 &spherical_coords);
+  bool isLandAtPoint(SpherePoint2 point);
 
   /**
    * Updates the visible area of the globe to include what would be visible at
-   * the given player's spherical coordinates.
+   * the given player's spherical position.
    * @param graphics_engine The engine rendering the globe.
    * @param graphics_state_guardian The graphics state guardian responsible for
    *     the globe.
-   * @param player_spherical_coords The coordinates the player is currently at.
+   * @param player_position The unit sphere position the player is currently at.
    */
   void updateVisibility(PT<GraphicsEngine> graphics_engine,
                         PT<GraphicsStateGuardian> graphics_state_guardian,
-                        LVecBase2 player_spherical_coords);
+                        SpherePoint2 player_position);
 
   inline NodePath getPath() { return path_; }
 

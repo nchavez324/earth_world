@@ -19,7 +19,6 @@
 #include "panda3d/windowFramework.h"
 #include "panda3d/windowProperties.h"
 #include "quaternion.h"
-#include "spherical_conversion.h"
 #include "typedefs.h"
 
 namespace earth_world {
@@ -44,7 +43,7 @@ App::App(int argc, char *argv[])
     : framework_(),
       input_(LVector3::zero()),
       camera_distance_(kCameraDistanceMin),
-      boat_spherical_coords_(0, 0, 1),
+      boat_unit_sphere_position_(/* azimuthal= */ 0, /* polar= */ 0),
       boat_heading_(0.f) {
   load_prc_file(kConfigFilepath);
 
@@ -155,30 +154,30 @@ AsyncTask::DoneStatus App::onUpdate(GenericAsyncTask *task) {
   LVector3 position_delta = heading * kBoatSpeed * clock_->get_dt();
 
   // 2. Update the boat's position in cartesian space and snap onto sphere.
-  LVector3 old_boat_unit_position =
-      cartesianCoordsFromSpherical(boat_spherical_coords_);
+
+  LVector3 old_boat_unit_position = boat_unit_sphere_position_.toCartesian();
   LVector3 new_boat_unit_position =
       (old_boat_unit_position + position_delta).normalized();
-  LVector3 new_boat_unit_spherical_position =
-      sphericalCoordsFromCartesian(new_boat_unit_position);
+  SpherePoint2 new_boat_unit_sphere_position =
+      SpherePoint2::fromCartesian(new_boat_unit_position);
   LVector3 old_boat_position =
       kGlobeWaterSurfaceHeight * kGlobeScale * old_boat_unit_position;
   LVector3 new_boat_position =
       kGlobeWaterSurfaceHeight * kGlobeScale * new_boat_unit_position;
 
   // 1.5. See if intended destination would be land, and withhold update if so.
-  if (globe_->isLandAtCoords(new_boat_unit_spherical_position.get_xy())) {
+  if (globe_->isLandAtPoint(new_boat_unit_sphere_position)) {
     new_boat_unit_position = old_boat_unit_position;
-    new_boat_unit_spherical_position = boat_spherical_coords_;
+    new_boat_unit_sphere_position = boat_unit_sphere_position_;
     new_boat_position = old_boat_position;
   } else {
-    boat_spherical_coords_ = new_boat_unit_spherical_position;
+    boat_unit_sphere_position_ = new_boat_unit_sphere_position;
     boat_path_.set_pos(new_boat_position);
   }
 
   // Update the visible range.
   globe_->updateVisibility(graphics_engine_, graphics_state_guardian_,
-                           boat_spherical_coords_.get_xy());
+                           boat_unit_sphere_position_);
 
   // 5. Update the heading if the input was non zero.
   if (!IS_NEARLY_ZERO(input_.get_x()) || !IS_NEARLY_ZERO(input_.get_y())) {

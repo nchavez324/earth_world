@@ -37,15 +37,14 @@ Globe::Globe(NodePath path, PT<GeomNode> node, NodePath visibility_compute_path,
       visibility_compute_path_(visibility_compute_path),
       land_mask_image_(land_mask_image) {}
 
-bool Globe::isLandAtCoords(const LVecBase2 &spherical_coords) {
+bool Globe::isLandAtPoint(SpherePoint2 point) {
   if (!kEnableLandCollision) {
     return false;
   }
+  LPoint2 pixelUV = point.toUV();
   LPoint2i pixel = LPoint2i(
-      static_cast<int>(land_mask_image_.get_x_size() *
-                       spherical_coords.get_x() / (2 * MathNumbers::pi)),
-      static_cast<int>(land_mask_image_.get_y_size() *
-                       ((-spherical_coords.get_y() / MathNumbers::pi) + 0.5)));
+      static_cast<int>(land_mask_image_.get_x_size() * pixelUV.get_x()),
+      static_cast<int>(land_mask_image_.get_y_size() * pixelUV.get_y()));
   pixel.set_x(std::max(0, pixel.get_x()));
   pixel.set_y(std::max(0, pixel.get_y()));
   pixel.set_x(std::min(land_mask_image_.get_x_size() - 1, pixel.get_x()));
@@ -57,10 +56,9 @@ bool Globe::isLandAtCoords(const LVecBase2 &spherical_coords) {
 
 void Globe::updateVisibility(PT<GraphicsEngine> graphics_engine,
                              PT<GraphicsStateGuardian> graphics_state_guardian,
-                             LVecBase2 player_spherical_coords) {
-  visibility_compute_path_.set_shader_input(
-      "u_PlayerSphericalCoords", LVector3(player_spherical_coords.get_x(),
-                                          player_spherical_coords.get_y(), 0));
+                             SpherePoint2 player_position) {
+  visibility_compute_path_.set_shader_input("u_PlayerSphericalCoords",
+                                            player_position);
   CPT<ShaderAttrib> attributes = DCAST(
       ShaderAttrib,
       visibility_compute_path_.get_attrib(ShaderAttrib::get_class_type()));

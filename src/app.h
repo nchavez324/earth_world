@@ -11,6 +11,7 @@
 #include "panda3d/graphicsStateGuardian.h"
 #include "panda3d/pandaFramework.h"
 #include "panda3d/windowFramework.h"
+#include "sphere_point.h"
 #include "typedefs.h"
 
 namespace earth_world {
@@ -48,7 +49,7 @@ class App {
   PN_stdfloat camera_distance_;
 
   NodePath boat_path_;
-  LPoint3 boat_spherical_coords_;
+  SpherePoint2 boat_unit_sphere_position_;
   PN_stdfloat boat_heading_;
 
   /**
