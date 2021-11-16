@@ -26,13 +26,14 @@
 namespace earth_world {
 
 bool const kEnableLandCollision = true;
-LVector2i kTextureSize(16384, 8192);
+LVector2i kMainTexSize(16384, 8192);
+LVector2i kIncognitaTexSize(3000, 3000);
+LVector2i kVisibilityTexSize(2048, 1024);
 PN_stdfloat const kLandMaskCutoff = 0.5f;
 
-Globe::Globe(NodePath path, PT<GeomNode> node, NodePath visibility_compute_path,
+Globe::Globe(NodePath path, NodePath visibility_compute_path,
              PNMImage land_mask_image)
     : path_(path),
-      node_(node),
       visibility_compute_path_(visibility_compute_path),
       land_mask_image_(land_mask_image) {}
 
@@ -69,6 +70,57 @@ void Globe::updateVisibility(PT<GraphicsEngine> graphics_engine,
 PT<Globe> Globe::build(PT<GraphicsEngine> graphics_engine,
                        PT<GraphicsStateGuardian> graphics_state_guardian,
                        int vertices_per_edge) {
+  PT<Texture> topology_tex =
+      loadTexture("topology", kMainTexSize, Texture::F_red);
+  PT<Texture> bathymetry_tex =
+      loadTexture("bathymetry", kMainTexSize, Texture::F_red);
+  PT<Texture> land_mask_tex =
+      loadTexture("land_mask", kMainTexSize, Texture::F_red);
+  PT<Texture> albedo_tex =
+      loadTexture("albedo_1", kMainTexSize, Texture::F_rgb);
+  PT<Texture> visibility_tex = buildVisibilityTexture(kVisibilityTexSize);
+  PT<Texture> incognita_tex =
+      loadTexture("paper", kIncognitaTexSize, Texture::F_rgb);
+
+  // Load another copy of the land mask for the CPU to use in collision
+  // detection.
+  PNMImage land_mask_image;
+  land_mask_image.read(filename::forTexture(
+      "land_mask_" + std::to_string(kMainTexSize.get_x()) + "x" +
+      std::to_string(kMainTexSize.get_y()) + ".png"));
+
+  PT<Shader> material_shader =
+      Shader::load(Shader::SL_GLSL, filename::forShader("simple.vert"),
+                   filename::forShader("simple.frag"));
+  NodePath path =
+      buildGeometry(graphics_engine, graphics_state_guardian, topology_tex,
+                    bathymetry_tex, land_mask_tex, vertices_per_edge);
+  path.set_shader(material_shader);
+  path.set_shader_input("u_LandMaskCutoff", LVector2(kLandMaskCutoff, 0));
+  setTextureStage(path, topology_tex, /* prio= */ 0);
+  setTextureStage(path, bathymetry_tex, /* prio= */ 1);
+  setTextureStage(path, land_mask_tex, /* prio= */ 2);
+  setTextureStage(path, albedo_tex, /* prio= */ 3);
+  setTextureStage(path, visibility_tex, /* prio= */ 4);
+  setTextureStage(path, incognita_tex, /* prio= */ 5);
+
+  // Set up recurring shader to update visibility mask.
+  NodePath visibility_compute_path("VisibilityCompute");
+  PT<Shader> visibility_shader = Shader::load_compute(
+      Shader::SL_GLSL, filename::forShader("updateVisibility.comp"));
+  visibility_compute_path.set_shader(visibility_shader);
+  visibility_compute_path.set_shader_input("u_VisibilityTex", visibility_tex);
+
+  PT<Globe> globe = new Globe(path, visibility_compute_path, land_mask_image);
+  return globe;
+}
+
+NodePath Globe::buildGeometry(PT<GraphicsEngine> graphics_engine,
+                              PT<GraphicsStateGuardian> graphics_state_guardian,
+                              PT<Texture> topology_tex,
+                              PT<Texture> bathymetry_tex,
+                              PT<Texture> land_mask_tex,
+                              int vertices_per_edge) {
   // Among the most important is the fact that arrays of types are not
   // necessarily tightly packed. An array of floats in such a block will not be
   // the equivalent to an array of floats in C/C++. The array stride (the bytes
@@ -99,6 +151,7 @@ PT<Globe> Globe::build(PT<GraphicsEngine> graphics_engine,
   PT<GeomVertexData> vertex_data = new GeomVertexData(
       "Globe", GeomVertexFormat::get_empty(), Geom::UH_static);
   PT<GeomTriangles> triangles = new GeomTriangles(Geom::UH_static);
+  // Lay out the triangle indices, since the mesh topology is fixed.
   for (int face = 0; face < face_count; face++) {
     for (int vertex_x = 0; vertex_x < vertices_per_edge - 1; vertex_x++) {
       for (int vertex_y = 0; vertex_y < vertices_per_edge - 1; vertex_y++) {
@@ -122,81 +175,6 @@ PT<Globe> Globe::build(PT<GraphicsEngine> graphics_engine,
   node->add_geom(geom);
   node->set_bounds_type(BoundingVolume::BT_box);
 
-  PT<Texture> visibility_texture = new Texture("VisibilityTexture");
-  // To save you some headache, just trying r8 or r16 doesn't work. It appears
-  // that when it passes to the fragment shader, it chokes trying to interpret.
-  visibility_texture->setup_2d_texture(2048, 1024, Texture::T_float,
-                                       Texture::F_rg16);
-  LColor clear_color(0, 0, 0, 0);
-  visibility_texture->set_clear_color(clear_color);
-  visibility_texture->set_wrap_u(SamplerState::WM_repeat);
-
-  LoaderOptions options;
-  options.set_texture_flags(LoaderOptions::TF_float);
-  PT<Texture> topology_texture = TexturePool::load_texture(
-      filename::forTexture("topology_" + std::to_string(kTextureSize.get_x()) +
-                           "x" + std::to_string(kTextureSize.get_y()) + ".png"),
-      /* primaryFileNumChannels= */ 1, /* readMipmaps= */ false, options);
-  topology_texture->set_format(Texture::F_red);
-  topology_texture->set_wrap_u(SamplerState::WM_repeat);
-
-  PT<Texture> bathymetry_texture = TexturePool::load_texture(
-      filename::forTexture("bathymetry_" +
-                           std::to_string(kTextureSize.get_x()) + "x" +
-                           std::to_string(kTextureSize.get_y()) + ".png"),
-      /* primaryFileNumChannels= */ 1, /* readMipmaps= */ false, options);
-  bathymetry_texture->set_format(Texture::F_red);
-  bathymetry_texture->set_wrap_u(SamplerState::WM_repeat);
-
-  PT<Texture> land_mask_texture = TexturePool::load_texture(
-      filename::forTexture("land_mask_" + std::to_string(kTextureSize.get_x()) +
-                           "x" + std::to_string(kTextureSize.get_y()) + ".png"),
-      /* primaryFileNumChannels= */ 1, /* readMipmaps= */ false, options);
-  land_mask_texture->set_format(Texture::F_red);
-  land_mask_texture->set_wrap_u(SamplerState::WM_repeat);
-
-  PNMImage land_mask_image;
-  land_mask_image.read(filename::forTexture(
-      "land_mask_" + std::to_string(kTextureSize.get_x()) + "x" +
-      std::to_string(kTextureSize.get_y()) + ".png"));
-
-  PT<Texture> albedo_texture = TexturePool::load_texture(
-      filename::forTexture("albedo_" + std::to_string(kTextureSize.get_x()) +
-                           "x" + std::to_string(kTextureSize.get_y()) +
-                           "_1.png"),
-      /* primaryFileNumChannels= */ 3, /* readMipmaps= */ false, options);
-  albedo_texture->set_wrap_u(SamplerState::WM_repeat);
-  albedo_texture->set_format(Texture::F_rgb);
-
-  PT<Texture> incognita_texture = TexturePool::load_texture(
-      filename::forTexture("paper.jpeg"),
-      /* primaryFileNumChannels= */ 3, /* readMipmaps= */ false, options);
-  incognita_texture->set_format(Texture::F_rgb);
-  incognita_texture->set_wrap_u(SamplerState::WM_repeat);
-  incognita_texture->set_wrap_v(SamplerState::WM_repeat);
-
-  PT<TextureStage> topology_stage = new TextureStage("TopologyStage");
-  PT<TextureStage> bathymetry_stage = new TextureStage("BathymetryStage");
-  PT<TextureStage> land_mask_stage = new TextureStage("LandMaskStage");
-  PT<TextureStage> albedo_stage = new TextureStage("AlbedoStage");
-  PT<TextureStage> visibility_stage = new TextureStage("VisibilityStage");
-  PT<TextureStage> incongnita_stage = new TextureStage("IncognitaStage");
-
-  PT<Shader> material_shader =
-      Shader::load(Shader::SL_GLSL, filename::forShader("simple.vert"),
-                   filename::forShader("simple.frag"));
-
-  NodePath path(node);
-  path.set_shader(material_shader);
-  path.set_texture(topology_stage, topology_texture, /* priority= */ 0);
-  path.set_texture(bathymetry_stage, bathymetry_texture, /* priority= */ 1);
-  path.set_texture(land_mask_stage, land_mask_texture, /* priority= */ 2);
-  path.set_texture(albedo_stage, albedo_texture, /* priority= */ 3);
-  path.set_texture(visibility_stage, visibility_texture, /* priority= */ 4);
-  path.set_texture(incongnita_stage, incognita_texture, /* priority= */ 5);
-  path.set_shader_input("u_VertexBuffer", vertex_buffer);
-  path.set_shader_input("u_LandMaskCutoff", LVector2(kLandMaskCutoff, 0));
-
   // Run one off position vertices compute shader.
   PT<Shader> position_vertices_shader = Shader::load_compute(
       Shader::SL_GLSL, filename::forShader("positionVertices.comp"));
@@ -207,9 +185,9 @@ PT<Globe> Globe::build(PT<GraphicsEngine> graphics_engine,
   position_vertices.set_shader_input("u_LandMaskCutoff",
                                      LVector2(kLandMaskCutoff, 0));
   position_vertices.set_shader_input("u_VertexBuffer", vertex_buffer);
-  position_vertices.set_shader_input("u_TopologyTex", topology_texture);
-  position_vertices.set_shader_input("u_BathymetryTex", bathymetry_texture);
-  position_vertices.set_shader_input("u_LandMaskTex", land_mask_texture);
+  position_vertices.set_shader_input("u_TopologyTex", topology_tex);
+  position_vertices.set_shader_input("u_BathymetryTex", bathymetry_tex);
+  position_vertices.set_shader_input("u_LandMaskTex", land_mask_tex);
   CPT<ShaderAttrib> attributes =
       DCAST(ShaderAttrib,
             position_vertices.get_attrib(ShaderAttrib::get_class_type()));
@@ -219,17 +197,70 @@ PT<Globe> Globe::build(PT<GraphicsEngine> graphics_engine,
   graphics_engine->dispatch_compute(work_groups, attributes,
                                     graphics_state_guardian);
 
-  // Set up recurring shader to update visibility mask.
-  NodePath visibility_compute_path("VisibilityCompute");
-  PT<Shader> visibility_shader = Shader::load_compute(
-      Shader::SL_GLSL, filename::forShader("updateVisibility.comp"));
-  visibility_compute_path.set_shader(visibility_shader);
-  visibility_compute_path.set_shader_input("u_VisibilityTex",
-                                           visibility_texture);
+  // Send the vertex buffer to the material shader to pull the vertices for
+  // rendering.
+  NodePath path(node);
+  path.set_shader_input("u_VertexBuffer", vertex_buffer);
 
-  PT<Globe> globe =
-      new Globe(path, node, visibility_compute_path, land_mask_image);
-  return globe;
+  return path;
+}
+
+void Globe::setTextureStage(NodePath path, PT<Texture> texture, int priority) {
+  PT<TextureStage> texture_stage =
+      new TextureStage(texture->get_name() + "_stage");
+  path.set_texture(texture_stage, texture, priority);
+}
+
+PT<Texture> Globe::loadTexture(std::string texture_base_name,
+                               LVector2i texture_size, Texture::Format format) {
+  LoaderOptions loader_options;
+  loader_options.set_texture_flags(LoaderOptions::TF_float);
+  int channel_count = 1;
+  switch (format) {
+    case Texture::F_red:
+    case Texture::F_green:
+    case Texture::F_blue:
+    case Texture::F_alpha:
+      channel_count = 1;
+      break;
+    case Texture::F_rg:
+      channel_count = 2;
+      break;
+    case Texture::F_rgb:
+      channel_count = 3;
+      break;
+    case Texture::F_rgba:
+      channel_count = 4;
+      break;
+    default:
+      break;
+  }
+  PT<Texture> texture = TexturePool::load_texture(
+      filename::forTexture(texture_base_name + "_" +
+                           std::to_string(texture_size.get_x()) + "x" +
+                           std::to_string(texture_size.get_y()) + ".png"),
+      /* primaryFileNumChannels= */ channel_count, /* readMipmaps= */ false,
+      loader_options);
+  texture->set_format(format);
+  texture->set_wrap_u(SamplerState::WM_repeat);
+  texture->set_wrap_v(SamplerState::WM_repeat);
+  texture->set_name(texture_base_name);
+  return texture;
+}
+
+PT<Texture> Globe::buildVisibilityTexture(LVector2i texture_size) {
+  // In the red channel, store everything that's ever been seen, and in the
+  // green channel store what's immediately visible.
+  PT<Texture> visibility_texture = new Texture("VisibilityTexture");
+  // To save you some headache, just trying r8 or r16 doesn't work. It appears
+  // that when it passes to the fragment shader, it chokes trying to interpret.
+  visibility_texture->setup_2d_texture(texture_size.get_x(),
+                                       texture_size.get_y(), Texture::T_float,
+                                       Texture::F_rg16);
+  LColor clear_color(0, 0, 0, 0);
+  visibility_texture->set_clear_color(clear_color);
+  visibility_texture->set_wrap_u(SamplerState::WM_repeat);
+  return visibility_texture;
 }
 
 }  // namespace earth_world

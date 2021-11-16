@@ -9,6 +9,7 @@
 #include "panda3d/pandaNode.h"
 #include "panda3d/pnmImage.h"
 #include "panda3d/referenceCount.h"
+#include "panda3d/texture.h"
 #include "sphere_point.h"
 #include "typedefs.h"
 
@@ -54,7 +55,6 @@ class Globe : public ReferenceCount {
 
  protected:
   NodePath path_;
-  PT<GeomNode> node_;
   /** The node that contains the compute shader for updating visibility. */
   NodePath visibility_compute_path_;
   /** The image representing a boolean mask of land vs. sea. */
@@ -63,14 +63,39 @@ class Globe : public ReferenceCount {
  private:
   /**
    * @param path The globe's node.
-   * @param node The geometry node rendering the globe.
    * @param visibility_compute_path The node that contains the compute shader
    *     for updating visibility.
    * @param land_mask_image The image representing a boolean mask of land vs.
    *     sea.
    */
-  explicit Globe(NodePath path, PT<GeomNode> node,
-                 NodePath visibility_compute_path, PNMImage land_mask_image);
+  explicit Globe(NodePath path, NodePath visibility_compute_path,
+                 PNMImage land_mask_image);
+
+  /** Helper function to build the geometry of the globe. */
+  static NodePath buildGeometry(
+      PT<GraphicsEngine> graphics_engine,
+      PT<GraphicsStateGuardian> graphics_state_guardian,
+      PT<Texture> topology_tex, PT<Texture> bathymetry_tex,
+      PT<Texture> land_mask_tex, int vertices_per_edge);
+
+  /** Sets the given texture as a new stage on the given path and priority. */
+  static void setTextureStage(NodePath path, PT<Texture> texture, int priority);
+
+  /**
+   * Loads a texture with the given parameters, with filename
+   * "{texture_base_name}_{texture_size.x}x{texture_size.y}.png".
+   * @param texture_base_name The prefix of the texture file.
+   * @param texture_size The pixel dimensions of the texture.
+   * @param format The texture's format. Only accepts r,g,b,a,rg,rgb, and rgba.
+   *     If not in the above, defaults to r.
+   * @return The loaded texture.
+   */
+  static PT<Texture> loadTexture(std::string texture_base_name,
+                                 LVector2i texture_size,
+                                 Texture::Format format);
+
+  /** Creates the texture used for keeping track of what's visible. */
+  static PT<Texture> buildVisibilityTexture(LVector2i texture_size);
 };
 
 }  // namespace earth_world

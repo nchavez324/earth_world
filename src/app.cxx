@@ -153,7 +153,6 @@ AsyncTask::DoneStatus App::onUpdate(GenericAsyncTask *task) {
   LVector3 position_delta = heading * kBoatSpeed * clock_->get_dt();
 
   // 2. Update the boat's position in cartesian space and snap onto sphere.
-
   LVector3 old_boat_unit_position = boat_unit_sphere_position_.toCartesian();
   LVector3 new_boat_unit_position =
       (old_boat_unit_position + position_delta).normalized();
@@ -164,8 +163,9 @@ AsyncTask::DoneStatus App::onUpdate(GenericAsyncTask *task) {
   LVector3 new_boat_position =
       kGlobeWaterSurfaceHeight * kGlobeScale * new_boat_unit_position;
 
-  // 1.5. See if intended destination would be land, and withhold update if so.
+  // 3. See if intended destination would be land, and withhold update if so.
   if (globe_->isLandAtPoint(new_boat_unit_sphere_position)) {
+    // Roll back the proposed update.
     new_boat_unit_position = old_boat_unit_position;
     new_boat_unit_sphere_position = boat_unit_sphere_position_;
     new_boat_position = old_boat_position;
@@ -174,7 +174,7 @@ AsyncTask::DoneStatus App::onUpdate(GenericAsyncTask *task) {
     boat_path_.set_pos(new_boat_position);
   }
 
-  // Update the visible range.
+  // 4. Update the visible portion of the globe.
   globe_->updateVisibility(graphics_engine_, graphics_state_guardian_,
                            boat_unit_sphere_position_);
 
