@@ -57,8 +57,8 @@ bool Globe::isLandAtPoint(SpherePoint2 point) {
 void Globe::updateVisibility(PT<GraphicsEngine> graphics_engine,
                              PT<GraphicsStateGuardian> graphics_state_guardian,
                              SpherePoint2 player_position) {
-  visibility_compute_path_.set_shader_input("u_PlayerSphericalCoords",
-                                            player_position);
+  SpherePoint3 coords = player_position.toRadial();
+  visibility_compute_path_.set_shader_input("u_PlayerSphericalCoords", coords);
   CPT<ShaderAttrib> attributes = DCAST(
       ShaderAttrib,
       visibility_compute_path_.get_attrib(ShaderAttrib::get_class_type()));

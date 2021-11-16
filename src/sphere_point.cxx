@@ -7,7 +7,6 @@ SpherePoint2 SpherePoint3::toUnit() const {
 }
 
 LVecBase3 SpherePoint3::toCartesian() const {
-  // azimuth [0,2PI], polar [-PI/2,PI/2]
   return LVecBase3(get_radial() * cosf(get_polar()) * cosf(get_azimuthal()),
                    get_radial() * cosf(get_polar()) * sinf(get_azimuthal()),
                    get_radial() * sinf(get_polar()));
@@ -39,6 +38,10 @@ LVecBase3 SpherePoint2::toCartesian() const { return toRadial().toCartesian(); }
 LVecBase2 SpherePoint2::toUV() const {
   return LVecBase2(get_azimuthal() / (2 * MathNumbers::pi),
                    ((-get_polar() / MathNumbers::pi) + 0.5));
+}
+
+SpherePoint2 SpherePoint2::fromCartesian(const LVecBase3 &cartesian) {
+  return SpherePoint3::fromCartesian(cartesian).toUnit();
 }
 
 }  // namespace earth_world
