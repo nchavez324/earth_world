@@ -20,6 +20,9 @@
 #include "panda3d/shaderAttrib.h"
 #include "panda3d/shaderBuffer.h"
 #include "panda3d/texture.h"
+#include "panda3d/textNode.h"
+#include "panda3d/textFont.h"
+#include "panda3d/fontPool.h"
 #include "panda3d/texturePool.h"
 #include "panda3d/textureStage.h"
 #include "quaternion.h"
@@ -27,23 +30,28 @@
 
 namespace earth_world {
 
-bool const kEnableLandCollision = true;
+bool const kEnableLandCollision = false;
 PN_stdfloat const kCityScale = 0.005f;
+PN_stdfloat const kCityLabelScale = 0.007f;
 LVector2i kMainTexSize(16384, 8192);
 LVector2i kIncognitaTexSize(3000, 3000);
 LVector2i kVisibilityTexSize(2048, 1024);
 PN_stdfloat const kLandMaskCutoff = 0.5f;
 
 int const kCityCount = 4;
-City const kCities[] = {
-    City("New York", "USA",
-         SpherePoint2::fromLatitudeAndLongitude(40.712776f, -74.005974)),
-    City("Bogota", "Colombia",
-         SpherePoint2::fromLatitudeAndLongitude(4.710989f, -74.072090f)),
-    City("Honolulu", "USA",
-         SpherePoint2::fromLatitudeAndLongitude(21.309919f, -157.858154f)),
-    City("Lisbon", "Portugal",
-         SpherePoint2::fromLatitudeAndLongitude(38.685108f, -9.238115f)),
+CityStaticData const kCities[] = {
+    CityStaticData(
+        "New York", "USA",
+        SpherePoint2::fromLatitudeAndLongitude(40.712776f, -74.005974)),
+    CityStaticData(
+        "Bogota", "Colombia",
+        SpherePoint2::fromLatitudeAndLongitude(4.710989f, -74.072090f)),
+    CityStaticData(
+        "Honolulu", "USA",
+        SpherePoint2::fromLatitudeAndLongitude(21.309919f, -157.858154f)),
+    CityStaticData(
+        "Lisbon", "Portugal",
+        SpherePoint2::fromLatitudeAndLongitude(38.685108f, -9.238115f)),
 };
 
 Globe::Globe(NodePath path, NodePath visibility_compute_path,
@@ -123,23 +131,35 @@ PT<Globe> Globe::build(PT<GraphicsEngine> graphics_engine,
 
   // Place cities on the globe.
   for (int i = 0; i < kCityCount; i++) {
-    const City &city = kCities[i];
-    SpherePoint2 city_unit_sphere_position = city.getLocation();
+    const CityStaticData &city_static_data = kCities[i];
+    SpherePoint2 city_unit_sphere_position = city_static_data.getLocation();
     PN_stdfloat topology_sample =
         sampleImage(topology_image, city_unit_sphere_position.toUV());
     PN_stdfloat city_height = (topology_sample * (1.f - 0.95f)) + 0.95f;
-    SpherePoint3 city_sphere_position =
-        SpherePoint3(city_unit_sphere_position, city_height);
 
-    LVector3 city_unit_position = city_unit_sphere_position.toCartesian();
-    LVector3 city_tangent = city_unit_position.cross(LVector3::up());
-    LQuaternion city_rotation =
-        quaternion::fromLookAt(city_tangent, city_unit_position);
+    PT<TextFont> font = FontPool::load_font("cmr12.egg");
+    PT<TextNode> city_label =
+        new TextNode(city_static_data.getName() + "_label");
+    city_label->set_text(city_static_data.getName());
+    city_label->set_font(font);
+    NodePath city_label_path = root_path.attach_new_node(city_label);
 
     NodePath city_path = city_prefab.copy_to(root_path);
-    city_path.set_pos(city_sphere_position.toCartesian());
-    city_path.set_quat(city_rotation);
+    City city(city_path, city_label_path, city_static_data, city_height);
+    city_path.set_pos(city.getLocation().toCartesian());
+    city_path.set_quat(city.getRotation());
     city_path.set_scale(kCityScale);
+
+    SpherePoint3 city_label_position = city.getLocation();
+    city_label_position.set(
+      city_label_position.get_azimuthal() + (0.01f / MathNumbers::pi),
+      city_label_position.get_polar() + (0.01f / MathNumbers::pi),
+      city_label_position.get_radial());
+    city_label_path.set_pos(city_label_position.toCartesian());
+    city_label_path.set_quat(quaternion::fromLookAt(
+        -city_unit_sphere_position.toCartesian(), LVector3::up()));
+    city_label_path.set_scale(kCityLabelScale);
+    city_label_path.set_depth_test(false); 
   }
 
   PT<Globe> globe =
@@ -289,7 +309,7 @@ PT<Texture> Globe::buildVisibilityTexture(LVector2i texture_size) {
   visibility_texture->setup_2d_texture(texture_size.get_x(),
                                        texture_size.get_y(), Texture::T_float,
                                        Texture::F_rg16);
-  LColor clear_color(0, 0, 0, 0);
+  LColor clear_color(1, 1, 1, 1);
   visibility_texture->set_clear_color(clear_color);
   visibility_texture->set_wrap_u(SamplerState::WM_repeat);
   return visibility_texture;
