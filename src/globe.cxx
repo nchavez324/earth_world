@@ -139,7 +139,7 @@ PT<Texture> Globe::buildVisibilityTex(const LVector2i &texture_size) {
   visibility_texture->setup_2d_texture(texture_size.get_x(),
                                        texture_size.get_y(), Texture::T_float,
                                        Texture::F_rg16);
-  LColor clear_color(1, 1, 1, 1);
+  LColor clear_color(0, 0, 0, 0);
   visibility_texture->set_clear_color(clear_color);
   visibility_texture->set_wrap_u(SamplerState::WM_repeat);
   return visibility_texture;

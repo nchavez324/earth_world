@@ -48,8 +48,8 @@ GlobeView::GlobeView(PT<WindowFramework> window, Globe& globe,
 
   // Build the material shader and apply all texture stages.
   PT<Shader> material_shader =
-      Shader::load(Shader::SL_GLSL, filename::forShader("simple.vert"),
-                   filename::forShader("simple.frag"));
+      Shader::load(Shader::SL_GLSL, filename::forShader("globe.vert"),
+                   filename::forShader("globe.frag"));
   NodePath mesh_path =
       buildGeometry(window->get_graphics_output(), globe, vertices_per_edge);
   mesh_path.set_shader(material_shader);

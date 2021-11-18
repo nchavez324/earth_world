@@ -40,7 +40,9 @@ App::App(PT<WindowFramework> window)
       clock_{ClockObject::get_global_clock()},
       globe_{},
       globe_view_{window, globe_, kGlobeVerticesPerEdge},
-      input_{LVector3::zero()},
+      minimap_view_{globe_},
+      input_{0},
+      last_window_size_{0},
       camera_distance_{kCameraDistanceMin},
       boat_unit_sphere_position_{/* azimuthal= */ 0, /* polar= */ 0},
       boat_heading_{0.f} {
@@ -64,6 +66,8 @@ App::App(PT<WindowFramework> window)
   camera_path_.set_pos((kGlobeScale + camera_distance_) * LVector3::right());
   camera_path_.set_quat(
       quaternion::fromLookAt(LVector3::left(), LVector3::up()));
+
+  minimap_view_.getPath().reparent_to(window->get_pixel_2d());
 
   PT<GenericAsyncTask> update_task =
       new GenericAsyncTask("Update", &App::onUpdate, /* app= */ this);
@@ -121,6 +125,17 @@ void App::onInputChange(LVector3 input_delta) {
 AsyncTask::DoneStatus App::onUpdate(GenericAsyncTask *task) {
   if (window_.is_null() || clock_.is_null()) {
     return AsyncTask::DS_exit;
+  }
+  PT<GraphicsWindow> graphics_window = window_->get_graphics_window();
+  if (graphics_window.is_null()) {
+    return AsyncTask::DS_exit;
+  }
+
+  // 0. Reposition UI if the window size has changed.
+  LVector2i new_window_size = graphics_window->get_size();
+  if (new_window_size != last_window_size_) {
+    last_window_size_ = new_window_size;
+    minimap_view_.onWindowResize(new_window_size);
   }
 
   // 1. Determine the velocity, by using the input in the camera's basis.

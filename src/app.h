@@ -3,6 +3,7 @@
 
 #include "globe.h"
 #include "globe_view.h"
+#include "minimap_view.h"
 #include "panda3d/asyncTask.h"
 #include "panda3d/clockObject.h"
 #include "panda3d/event.h"
@@ -39,11 +40,13 @@ class App {
 
   Globe globe_;
   GlobeView globe_view_;
+  MinimapView minimap_view_;
   /**
    * The user's input, where the X axis is horizontal motion, the Y axis is
    * vertical motion, the Z axis is zoom level.
    */
   LVector3 input_;
+  LVector2i last_window_size_;
 
   NodePath camera_path_;
   PN_stdfloat camera_distance_;
