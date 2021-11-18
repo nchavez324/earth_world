@@ -21,7 +21,7 @@ class SpherePoint2;
 /** Represents a point in spherical coordinates. */
 class SpherePoint3 : public LVecBase3 {
  public:
-  SpherePoint3() = default;
+  SpherePoint3() : LVecBase3(0) {}
   SpherePoint3(PN_stdfloat azimuthal, PN_stdfloat polar, PN_stdfloat radial)
       : LVecBase3(azimuthal, polar, radial) {}
   SpherePoint3(SpherePoint2 &unit_point, PN_stdfloat radial);
@@ -53,7 +53,7 @@ class SpherePoint3 : public LVecBase3 {
  */
 class SpherePoint2 : public LVecBase2 {
  public:
-  SpherePoint2() = default;
+  SpherePoint2() : LVecBase2(0) {}
   SpherePoint2(PN_stdfloat azimuthal, PN_stdfloat polar)
       : LVecBase2(azimuthal, polar) {}
 

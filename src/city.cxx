@@ -4,16 +4,8 @@
 
 namespace earth_world {
 
-CityStaticData::CityStaticData(std::string name, std::string country_name,
-                               SpherePoint2 location)
-    : name_(name), country_name_(country_name), location_(location) {}
-
-City::City(NodePath path, NodePath label_path,
-           const CityStaticData &city_static_data, PN_stdfloat height)
-    : path_(path),
-      label_path_(label_path),
-      name_(city_static_data.getName()),
-      country_name_(city_static_data.getCountryName()) {
+City::City(const CityStaticData& city_static_data, PN_stdfloat height)
+    : city_static_data_{city_static_data} {
   SpherePoint2 unit_sphere_position = city_static_data.getLocation();
   location_ = SpherePoint3(unit_sphere_position, height);
 
@@ -21,5 +13,15 @@ City::City(NodePath path, NodePath label_path,
   LVector3 tangent = unit_position.cross(LVector3::up());
   rotation_ = quaternion::fromLookAt(tangent, unit_position);
 }
+
+const std::string& City::getName() const { return city_static_data_.getName(); }
+
+const std::string& City::getCountryName() const {
+  return city_static_data_.getCountryName();
+}
+
+const SpherePoint3& City::getLocation() const { return location_; }
+
+const LQuaternion& City::getRotation() const { return rotation_; }
 
 }  // namespace earth_world

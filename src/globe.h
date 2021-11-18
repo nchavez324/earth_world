@@ -1,87 +1,66 @@
 #ifndef EARTH_WORLD_GLOBE_H
 #define EARTH_WORLD_GLOBE_H
 
+#include "city.h"
+#include "city_static_data.h"
 #include "panda3d/aa_luse.h"
-#include "panda3d/geomNode.h"
-#include "panda3d/graphicsEngine.h"
-#include "panda3d/graphicsStateGuardian.h"
-#include "panda3d/nodePath.h"
-#include "panda3d/pandaNode.h"
+#include "panda3d/graphicsOutput.h"
 #include "panda3d/pnmImage.h"
-#include "panda3d/referenceCount.h"
 #include "panda3d/texture.h"
-#include "sphere_point.h"
 #include "typedefs.h"
 
 namespace earth_world {
 
-/** A representation of the planet Earth. */
-class Globe : public ReferenceCount {
+class Globe {
  public:
-  Globe() = delete;
+  Globe();
+  Globe(PT<Texture> topology_texture, PT<Texture> bathymetry_texture,
+        PT<Texture> land_mask_texture, PT<Texture> albedo_texture,
+        PT<Texture> visibility_texture, PN_stdfloat land_mask_cutoff,
+        const std::vector<CityStaticData>& city_static_data);
+  Globe(const Globe&) = delete;
+  Globe(Globe&&) = delete;
+  Globe& operator=(const Globe&) = delete;
+  Globe& operator=(Globe&&) = delete;
+  ~Globe() = default;
+
+  PT<Texture> getTopologyTexture();
+  PT<Texture> getBathymetryTexture();
+  PT<Texture> getLandMaskTexture();
+  PT<Texture> getAlbedoTexture();
+  PT<Texture> getVisibilityTexture();
+  PN_stdfloat getLandMaskCutoff() const;
+  const std::vector<City>& getCities() const;
 
   /**
    * Tests whether there is land at the given unit sphere point.
    * @param point The point to test.
    * @return True if the given point rests on land.
    */
-  bool isLandAtPoint(SpherePoint2 point);
+  bool isLandAtPoint(const SpherePoint2& point);
 
   /**
    * Updates the visible area of the globe to include what would be visible at
    * the given player's spherical position.
-   * @param graphics_engine The engine rendering the globe.
-   * @param graphics_state_guardian The graphics state guardian responsible for
-   *     the globe.
+   * @param graphics_output The graphics output to run compute shaders on.
    * @param player_position The unit sphere position the player is currently at.
    */
-  void updateVisibility(PT<GraphicsEngine> graphics_engine,
-                        PT<GraphicsStateGuardian> graphics_state_guardian,
-                        SpherePoint2 player_position);
-
-  inline NodePath getPath() { return path_; }
-
-  /**
-   * Builds a new globe instance.
-   * @param graphics_engine The engine rendering the globe.
-   * @param graphics_state_guardian The graphics state guardian responsible for
-   *     the globe.
-   * @param city_prefab The model to use to instantiate all others.
-   * @param vertices_per_edge The number of vertices to use for each edge of the
-   *     sphere-cube used for the globe's topology.
-   */
-  static PT<Globe> build(PT<GraphicsEngine> graphics_engine,
-                         PT<GraphicsStateGuardian> graphics_state_guardian,
-                         NodePath city_prefab,
-                         int vertices_per_edge);
+  void updateVisibility(PT<GraphicsOutput> graphics_output,
+                        const SpherePoint2& player_position);
 
  protected:
-  NodePath path_;
-  /** The node that contains the compute shader for updating visibility. */
-  NodePath visibility_compute_path_;
-  /** The image representing a boolean mask of land vs. sea. */
+  PT<Texture> topology_texture_;
+  PT<Texture> bathymetry_texture_;
+  PT<Texture> land_mask_texture_;
+  PT<Texture> albedo_texture_;
+  PT<Texture> visibility_texture_;
+
+  PNMImage topology_image_;
   PNMImage land_mask_image_;
 
- private:
-  /**
-   * @param path The globe's node.
-   * @param visibility_compute_path The node that contains the compute shader
-   *     for updating visibility.
-   * @param land_mask_image The image representing a boolean mask of land vs.
-   *     sea.
-   */
-  explicit Globe(NodePath path, NodePath visibility_compute_path,
-                 PNMImage land_mask_image);
-
-  /** Helper function to build the geometry of the globe. */
-  static NodePath buildGeometry(
-      PT<GraphicsEngine> graphics_engine,
-      PT<GraphicsStateGuardian> graphics_state_guardian,
-      PT<Texture> topology_tex, PT<Texture> bathymetry_tex,
-      PT<Texture> land_mask_tex, int vertices_per_edge);
-
-  /** Sets the given texture as a new stage on the given path and priority. */
-  static void setTextureStage(NodePath path, PT<Texture> texture, int priority);
+  NodePath visibility_compute_;
+  const PN_stdfloat land_mask_cutoff_;
+  std::vector<City> cities_;
 
   /**
    * Loads a texture with the given parameters, with filename
@@ -92,15 +71,15 @@ class Globe : public ReferenceCount {
    *     If not in the above, defaults to r.
    * @return The loaded texture.
    */
-  static PT<Texture> loadTexture(std::string texture_base_name,
-                                 LVector2i texture_size,
-                                 Texture::Format format);
+  static PT<Texture> loadTex(const std::string& texture_base_name,
+                             const LVector2i& texture_size,
+                             Texture::Format format);
 
   /** Creates the texture used for keeping track of what's visible. */
-  static PT<Texture> buildVisibilityTexture(LVector2i texture_size);
+  static PT<Texture> buildVisibilityTex(const LVector2i& texture_size);
 
   /** Samples the intensity of the image at the given point. */
-  static PN_stdfloat sampleImage(PNMImage &image, LPoint2 UV);
+  static PN_stdfloat sampleImage(const PNMImage& image, const LPoint2& uv);
 };
 
 }  // namespace earth_world

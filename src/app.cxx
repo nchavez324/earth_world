@@ -10,9 +10,7 @@
 #include "panda3d/geomLines.h"
 #include "panda3d/geomTriangles.h"
 #include "panda3d/graphicsPipe.h"
-#include "panda3d/load_prc_file.h"
 #include "panda3d/mouseAndKeyboard.h"
-#include "panda3d/pStatClient.h"
 #include "panda3d/pandaFramework.h"
 #include "panda3d/pandaSystem.h"
 #include "panda3d/shader.h"
@@ -26,8 +24,6 @@ namespace earth_world {
 
 bool const kEnableDebugAxes = false;
 int const kGlobeVerticesPerEdge = 100;
-LVector2i const kWindowSizeInitial(800, 600);
-std::string const kWindowTitle("Earth World");
 PN_stdfloat const kAxesScale = 40.f;
 PN_stdfloat const kGlobeScale = 20.f;
 PN_stdfloat const kGlobeWaterSurfaceHeight = 0.95f;
@@ -38,35 +34,17 @@ PN_stdfloat const kCameraDistanceMax = 20.f;
 PN_stdfloat const kCameraZoomSpeed = 5.f;
 LColor const kClearColor(0, 0, 0, 1);
 
-App::App(int argc, char *argv[])
-    : framework_(),
-      input_(LVector3::zero()),
-      camera_distance_(kCameraDistanceMin),
-      boat_unit_sphere_position_(/* azimuthal= */ 0, /* polar= */ 0),
-      boat_heading_(0.f) {
-  load_prc_file(filename::kConfigFilename);
-
-  if (PStatClient::is_connected()) {
-    PStatClient::disconnect();
-  }
-  if (!PStatClient::connect()) {
-    std::cout << "Could not connect to PStat server." << std::endl;
-  }
-
-  framework_.open_framework(argc, argv);
-  clock_ = ClockObject::get_global_clock();
-
-  WindowProperties window_properties;
-  window_properties.set_title(kWindowTitle);
-  window_properties.set_size(kWindowSizeInitial);
-  window_properties.set_fixed_size(false);
-  int flags = GraphicsPipe::BF_require_window;
-  window_ = framework_.open_window(window_properties, flags);
-  window_->enable_keyboard();
+App::App(PT<WindowFramework> window)
+    : framework_{window->get_panda_framework()},
+      window_{window},
+      clock_{ClockObject::get_global_clock()},
+      globe_{},
+      globe_view_{window, globe_, kGlobeVerticesPerEdge},
+      input_{LVector3::zero()},
+      camera_distance_{kCameraDistanceMin},
+      boat_unit_sphere_position_{/* azimuthal= */ 0, /* polar= */ 0},
+      boat_heading_{0.f} {
   window_->get_display_region_3d()->set_clear_color(kClearColor);
-
-  graphics_engine_ = GraphicsEngine::get_global_ptr();
-  graphics_state_guardian_ = window_->get_graphics_window()->get_gsg();
 
   if (kEnableDebugAxes) {
     NodePath axes = debug_axes::build();
@@ -74,14 +52,10 @@ App::App(int argc, char *argv[])
     axes.set_scale(kAxesScale);
   }
 
-  NodePath city_prefab = window_->load_model(
-      framework_.get_models(), filename::forModel("city/S_City.bam"));
-  globe_ = Globe::build(graphics_engine_, graphics_state_guardian_, city_prefab,
-                        kGlobeVerticesPerEdge);
-  globe_->getPath().reparent_to(window_->get_render());
-  globe_->getPath().set_scale(kGlobeScale);
+  globe_view_.getPath().reparent_to(window_->get_render());
+  globe_view_.getPath().set_scale(kGlobeScale);
 
-  boat_path_ = window_->load_model(framework_.get_models(),
+  boat_path_ = window_->load_model(framework_->get_models(),
                                    filename::forModel("boat/S_Boat.bam"));
   boat_path_.reparent_to(window_->get_render());
   boat_path_.set_scale(kBoatScale);
@@ -93,7 +67,7 @@ App::App(int argc, char *argv[])
 
   PT<GenericAsyncTask> update_task =
       new GenericAsyncTask("Update", &App::onUpdate, /* app= */ this);
-  framework_.get_task_mgr().add(update_task);
+  framework_->get_task_mgr().add(update_task);
 
   defineAxisKey("w", "s", "Up", "Down", &App::onInputUp, &App::onInputDown);
   defineAxisKey("d", "a", "Right", "Left", &App::onInputRight,
@@ -106,9 +80,15 @@ App::App(int argc, char *argv[])
                 &App::onInputZoomOut);
 }
 
+App::~App() {
+  globe_view_.getPath().remove_node();
+  camera_path_.remove_node();
+  boat_path_.remove_node();
+}
+
 int App::run() {
-  framework_.main_loop();
-  framework_.close_framework();
+  framework_->main_loop();
+  framework_->close_framework();
   return 0;
 }
 
@@ -117,18 +97,18 @@ void App::defineAxisKey(
     const std::string &positive_name, const std::string &negative_name,
     EventHandler::EventCallbackFunction *positive_callback,
     EventHandler::EventCallbackFunction *negative_callback) {
-  framework_.define_key(positive_key_name, positive_name + " pressed",
-                        positive_callback,
-                        /* app= */ this);
-  framework_.define_key(positive_key_name + "-up", positive_name + " released",
-                        negative_callback,
-                        /* app= */ this);
-  framework_.define_key(negative_key_name, negative_name + " pressed",
-                        negative_callback,
-                        /* app= */ this);
-  framework_.define_key(negative_key_name + "-up", negative_name + " released",
-                        positive_callback,
-                        /* app= */ this);
+  framework_->define_key(positive_key_name, positive_name + " pressed",
+                         positive_callback,
+                         /* app= */ this);
+  framework_->define_key(positive_key_name + "-up", positive_name + " released",
+                         negative_callback,
+                         /* app= */ this);
+  framework_->define_key(negative_key_name, negative_name + " pressed",
+                         negative_callback,
+                         /* app= */ this);
+  framework_->define_key(negative_key_name + "-up", negative_name + " released",
+                         positive_callback,
+                         /* app= */ this);
 }
 
 void App::onInputChange(LVector3 input_delta) {
@@ -139,8 +119,7 @@ void App::onInputChange(LVector3 input_delta) {
 }
 
 AsyncTask::DoneStatus App::onUpdate(GenericAsyncTask *task) {
-  if (window_.is_null() || clock_.is_null() ||
-      graphics_state_guardian_.is_null()) {
+  if (window_.is_null() || clock_.is_null()) {
     return AsyncTask::DS_exit;
   }
 
@@ -166,7 +145,7 @@ AsyncTask::DoneStatus App::onUpdate(GenericAsyncTask *task) {
       kGlobeWaterSurfaceHeight * kGlobeScale * new_boat_unit_position;
 
   // 3. See if intended destination would be land, and withhold update if so.
-  if (globe_->isLandAtPoint(new_boat_unit_sphere_position)) {
+  if (globe_.isLandAtPoint(new_boat_unit_sphere_position)) {
     // Roll back the proposed update.
     new_boat_unit_position = old_boat_unit_position;
     new_boat_unit_sphere_position = boat_unit_sphere_position_;
@@ -177,8 +156,8 @@ AsyncTask::DoneStatus App::onUpdate(GenericAsyncTask *task) {
   }
 
   // 4. Update the visible portion of the globe.
-  globe_->updateVisibility(graphics_engine_, graphics_state_guardian_,
-                           boat_unit_sphere_position_);
+  globe_.updateVisibility(window_->get_graphics_output(),
+                          boat_unit_sphere_position_);
 
   // 5. Update the heading if the input was non zero.
   if (!IS_NEARLY_ZERO(input_.get_x()) || !IS_NEARLY_ZERO(input_.get_y())) {

@@ -2,6 +2,7 @@
 #define EARTH_WORLD_APP_H
 
 #include "globe.h"
+#include "globe_view.h"
 #include "panda3d/asyncTask.h"
 #include "panda3d/clockObject.h"
 #include "panda3d/event.h"
@@ -20,10 +21,10 @@ class App {
  public:
   /**
    * Creates the app, loading all necessary resources.
-   * @param argc The number of arguments contained in the argument list.
-   * @param argv An array of arguments, as C strings.
+   * @param window The window in which to run the app.
    */
-  explicit App(int argc, char *argv[]);
+  App(PT<WindowFramework> window);
+  ~App();
 
   /**
    * Starts the app's event loop, until terminated by the user.
@@ -32,13 +33,12 @@ class App {
   int run();
 
  protected:
-  PandaFramework framework_;
-  PT<ClockObject> clock_;
+  PandaFramework *framework_;
   PT<WindowFramework> window_;
-  PT<GraphicsEngine> graphics_engine_;
-  PT<GraphicsStateGuardian> graphics_state_guardian_;
+  PT<ClockObject> clock_;
 
-  PT<Globe> globe_;
+  Globe globe_;
+  GlobeView globe_view_;
   /**
    * The user's input, where the X axis is horizontal motion, the Y axis is
    * vertical motion, the Z axis is zoom level.
