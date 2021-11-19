@@ -65,9 +65,9 @@ GlobeView::GlobeView(PT<WindowFramework> window, Globe& globe,
 
   // Place cities on the globe.
   city_views_.reserve(globe.getCities().size());
-  const std::vector<City>& cities = globe.getCities();
-  for (auto i = cities.begin(); i != cities.end(); ++i) {
-    CityView city_view(window, *i);
+  std::vector<City>& cities = globe.getCities();
+  for (City &i : cities) {
+    CityView city_view(window, i);
     city_view.getPath().reparent_to(path_);
     city_views_.push_back(std::move(city_view));
   }

@@ -68,7 +68,7 @@ PT<Texture> Globe::getVisibilityTexture() { return visibility_texture_; }
 
 PN_stdfloat Globe::getLandMaskCutoff() const { return land_mask_cutoff_; }
 
-const std::vector<City> &Globe::getCities() const { return cities_; }
+std::vector<City> &Globe::getCities() { return cities_; }
 
 bool Globe::isLandAtPoint(const SpherePoint2 &point) {
   if (!kEnableLandCollision) {

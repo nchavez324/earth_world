@@ -6,6 +6,8 @@
 #include "minimap_view.h"
 #include "panda3d/asyncTask.h"
 #include "panda3d/clockObject.h"
+#include "panda3d/collisionHandlerQueue.h"
+#include "panda3d/collisionTraverser.h"
 #include "panda3d/event.h"
 #include "panda3d/genericAsyncTask.h"
 #include "panda3d/graphicsEngine.h"
@@ -37,6 +39,8 @@ class App {
   PandaFramework *framework_;
   PT<WindowFramework> window_;
   PT<ClockObject> clock_;
+  CollisionTraverser collision_traverser_;
+  CollisionHandlerQueue collision_handler_queue_;
 
   Globe globe_;
   GlobeView globe_view_;
@@ -52,6 +56,7 @@ class App {
   PN_stdfloat camera_distance_;
 
   NodePath boat_path_;
+  NodePath boat_collider_path_;
   SpherePoint2 boat_unit_sphere_position_;
   PN_stdfloat boat_heading_;
 

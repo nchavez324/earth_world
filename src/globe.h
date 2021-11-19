@@ -30,7 +30,7 @@ class Globe {
   PT<Texture> getAlbedoTexture();
   PT<Texture> getVisibilityTexture();
   PN_stdfloat getLandMaskCutoff() const;
-  const std::vector<City>& getCities() const;
+  std::vector<City>& getCities();
 
   /**
    * Tests whether there is land at the given unit sphere point.

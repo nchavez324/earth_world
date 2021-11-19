@@ -35,6 +35,7 @@ class GlobeView {
   ~GlobeView();
 
   NodePath getPath() const;
+  const std::vector<CityView> &getCityViews() const { return city_views_; };
 
  protected:
   NodePath path_;
