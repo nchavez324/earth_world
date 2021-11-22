@@ -1,6 +1,5 @@
 #include "globe_view.h"
 
-#include "city.h"
 #include "filename.h"
 #include "panda3d/aa_luse.h"
 #include "panda3d/boundingBox.h"
@@ -26,12 +25,13 @@
 #include "panda3d/texture.h"
 #include "panda3d/texturePool.h"
 #include "panda3d/textureStage.h"
+#include "panda3d/windowFramework.h"
 #include "quaternion.h"
 #include "typedefs.h"
 
 namespace earth_world {
 
-GlobeView::GlobeView(PT<WindowFramework> window, Globe& globe,
+GlobeView::GlobeView(PT<GraphicsOutput> graphics_output, Globe& globe,
                      int vertices_per_edge)
     : path_{"Globe"} {
   // Build the texture used to denote unexplored terrain.
@@ -50,8 +50,7 @@ GlobeView::GlobeView(PT<WindowFramework> window, Globe& globe,
   PT<Shader> material_shader =
       Shader::load(Shader::SL_GLSL, filename::forShader("globe.vert"),
                    filename::forShader("globe.frag"));
-  NodePath mesh_path =
-      buildGeometry(window->get_graphics_output(), globe, vertices_per_edge);
+  NodePath mesh_path = buildGeometry(graphics_output, globe, vertices_per_edge);
   mesh_path.set_shader(material_shader);
   mesh_path.set_shader_input("u_LandMaskCutoff",
                              LVector2(globe.getLandMaskCutoff(), 0));
@@ -62,19 +61,9 @@ GlobeView::GlobeView(PT<WindowFramework> window, Globe& globe,
   setTextureStage(mesh_path, globe.getVisibilityTexture(), /* prio= */ 4);
   setTextureStage(mesh_path, incognita_texture, /* prio= */ 5);
   mesh_path.reparent_to(path_);
-
-  // Place cities on the globe.
-  city_views_.reserve(globe.getCities().size());
-  std::vector<City>& cities = globe.getCities();
-  for (City &i : cities) {
-    CityView city_view(window, i);
-    city_view.getPath().reparent_to(path_);
-    city_views_.push_back(std::move(city_view));
-  }
 }
 
-GlobeView::GlobeView(GlobeView&& other) noexcept
-    : path_{other.path_}, city_views_{std::move(other.city_views_)} {
+GlobeView::GlobeView(GlobeView&& other) noexcept : path_{other.path_} {
   other.path_.clear();
 }
 
@@ -85,7 +74,6 @@ GlobeView& GlobeView::operator=(GlobeView&& other) noexcept {
   path_.remove_node();
   path_ = other.path_;
   other.path_.clear();
-  city_views_ = std::move(other.city_views_);
   return *this;
 }
 

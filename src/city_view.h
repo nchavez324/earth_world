@@ -16,23 +16,23 @@ namespace earth_world {
 /** Represents the view of city on the map. */
 class CityView {
  public:
-  CityView(PT<WindowFramework> window, City &city);
+  CityView(PT<WindowFramework> window, const City &city);
   CityView(const CityView &) = delete;
   CityView(CityView &&) noexcept;
   CityView &operator=(const CityView &) = delete;
   CityView &operator=(CityView &&) noexcept;
   ~CityView();
 
-  City& getCity() const { return city_; }
+  int getCityId() const;
   NodePath getPath() const;
-  NodePath getColliderPath() const;
+
+  void rerender(const City& city);
 
  protected:
-  City& city_;
+  int city_id_;
   NodePath path_;
   NodePath model_path_;
   NodePath label_path_;
-  NodePath collider_path_;
 };
 
 }  // namespace earth_world

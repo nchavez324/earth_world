@@ -1,9 +1,6 @@
 #ifndef EARTH_WORLD_GLOBE_VIEW_H
 #define EARTH_WORLD_GLOBE_VIEW_H
 
-#include <vector>
-
-#include "city_view.h"
 #include "globe.h"
 #include "panda3d/aa_luse.h"
 #include "panda3d/geomNode.h"
@@ -22,12 +19,13 @@ namespace earth_world {
 class GlobeView {
  public:
   /**
-   * @param window The window in which this globe will be viewed.
+   * @param graphics_output The output in which this globe will be viewed.
    * @param globe The globe model to render.
    * @param vertices_per_edge The number of vertices to use for each edge of the
    *     sphere-cube used for the globe's topology.
    */
-  GlobeView(PT<WindowFramework> window, Globe &globe, int vertices_per_edge);
+  GlobeView(PT<GraphicsOutput> graphics_output, Globe &globe,
+            int vertices_per_edge);
   GlobeView(const GlobeView &) = delete;
   GlobeView(GlobeView &&) noexcept;
   GlobeView &operator=(const GlobeView &) = delete;
@@ -35,11 +33,9 @@ class GlobeView {
   ~GlobeView();
 
   NodePath getPath() const;
-  const std::vector<CityView> &getCityViews() const { return city_views_; };
 
  protected:
   NodePath path_;
-  std::vector<CityView> city_views_;
 
   /** Helper function to build a node containing the globe's geometry. */
   static NodePath buildGeometry(PT<GraphicsOutput> graphics_output,

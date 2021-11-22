@@ -19,8 +19,8 @@ const PN_stdfloat kCityScale = 0.005f;
 const PN_stdfloat kCityLabelScale = 0.007f;
 const PN_stdfloat kCityLabelOffset = 0.01f / MathNumbers::pi;
 
-CityView::CityView(PT<WindowFramework> window, City &city)
-    : city_{city}, path_{city.getName() + "_CityRoot"} {
+CityView::CityView(PT<WindowFramework> window, const City &city)
+    : city_id_{city.getId()}, path_{city.getName() + "_CityRoot"} {
   const SpherePoint3 &sphere_position = city.getLocation();
   LVector3 cartesian_position = sphere_position.toCartesian();
   LVector3 tangent = cartesian_position.cross(LVector3::up());
@@ -28,19 +28,19 @@ CityView::CityView(PT<WindowFramework> window, City &city)
 
   path_.set_pos(cartesian_position);
 
-  model_path_ = window->load_model(window->get_panda_framework()->get_models(),
-                                   filename::forModel("city/S_City.bam"));
+  model_path_ =
+      window->load_model(window->get_panda_framework()->get_models(),
+                         filename::forModel("city/S_City.bam"));
   model_path_.reparent_to(path_);
   model_path_.set_pos(LVector3::zero());
   model_path_.set_quat(rotation);
   model_path_.set_scale(kCityScale);
 
-  PT<CollisionSphere> collider = new CollisionSphere(0, 0, 0, 1.5f * kCityScale);
-  PT<CollisionNode> collider_node =
-      new CollisionNode("CityCollider");
+  PT<CollisionSphere> collider =
+      new CollisionSphere(0, 0, 0, 1.5f * kCityScale);
+  PT<CollisionNode> collider_node = new CollisionNode("CityCollider");
   collider_node->add_solid(collider);
-  collider_path_ = path_.attach_new_node(collider_node);
-  collider_path_.show();
+  NodePath collider_path = path_.attach_new_node(collider_node);
 
   PT<TextFont> font = FontPool::load_font("cmr12.egg");
   PT<TextNode> city_label = new TextNode(city.getName() + "_label");
@@ -48,6 +48,7 @@ CityView::CityView(PT<WindowFramework> window, City &city)
   city_label->set_font(font);
 
   label_path_ = path_.attach_new_node(city_label);
+  label_path_.hide();
 
   // Offset the label a bit up and right of the city.
   SpherePoint3 label_offset_global =
@@ -65,30 +66,26 @@ CityView::CityView(PT<WindowFramework> window, City &city)
 }
 
 CityView::CityView(CityView &&other) noexcept
-    : city_{other.city_},
+    : city_id_{other.city_id_},
       path_{other.path_},
       model_path_{other.model_path_},
-      label_path_{other.label_path_},
-      collider_path_{other.collider_path_} {
+      label_path_{other.label_path_} {
   other.path_.clear();
   other.model_path_.clear();
   other.label_path_.clear();
-  other.collider_path_.clear();
 }
 
 CityView &CityView::operator=(CityView &&other) noexcept {
   path_.remove_node();
 
-  city_ = other.city_;
+  city_id_ = other.city_id_;
   path_ = other.path_;
   model_path_ = other.model_path_;
   label_path_ = other.label_path_;
-  collider_path_ = other.collider_path_;
 
   other.path_.clear();
   other.model_path_.clear();
   other.label_path_.clear();
-  other.collider_path_.clear();
 
   return *this;
 }
@@ -97,6 +94,14 @@ CityView::~CityView() { path_.remove_node(); }
 
 NodePath CityView::getPath() const { return path_; }
 
-NodePath CityView::getColliderPath() const { return collider_path_; }
+int CityView::getCityId() const { return city_id_; }
+
+void CityView::rerender(const City& city) {
+  if (city.getIsDiscovered()) {
+    label_path_.show();
+  } else {
+    label_path_.hide();
+  }
+}
 
 }  // namespace earth_world

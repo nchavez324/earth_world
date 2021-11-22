@@ -24,23 +24,24 @@
 
 namespace earth_world {
 
-bool const kEnableDebugAxes = false;
-int const kGlobeVerticesPerEdge = 100;
-PN_stdfloat const kAxesScale = 40.f;
-PN_stdfloat const kGlobeScale = 20.f;
-PN_stdfloat const kGlobeWaterSurfaceHeight = 0.95f;
-PN_stdfloat const kBoatScale = 0.05f;
-PN_stdfloat const kBoatSpeed = 0.3f;
-PN_stdfloat const kCameraDistanceMin = 7.f;
-PN_stdfloat const kCameraDistanceMax = 20.f;
-PN_stdfloat const kCameraZoomSpeed = 5.f;
-LColor const kClearColor(0, 0, 0, 1);
+const bool kEnableDebugAxes = false;
+const int kGlobeVerticesPerEdge = 100;
+const PN_stdfloat kAxesScale = 40.f;
+const PN_stdfloat kGlobeScale = 20.f;
+const PN_stdfloat kGlobeWaterSurfaceHeight = 0.95f;
+const PN_stdfloat kBoatScale = 0.05f;
+const PN_stdfloat kBoatSpeed = 0.3f;
+const PN_stdfloat kCameraDistanceMin = 7.f;
+const PN_stdfloat kCameraDistanceMax = 20.f;
+const PN_stdfloat kCameraZoomSpeed = 5.f;
+const std::string kTagCityId = "city_id";
+const LColor kClearColor(0, 0, 0, 1);
 
 App::App(PT<WindowFramework> window)
     : framework_{window->get_panda_framework()},
       window_{window},
       collision_handler_queue_{new CollisionHandlerQueue},
-      globe_view_{window, globe_, kGlobeVerticesPerEdge},
+      globe_view_{window->get_graphics_output(), globe_, kGlobeVerticesPerEdge},
       minimap_view_{globe_},
       input_{0},
       last_window_size_{0},
@@ -57,6 +58,25 @@ App::App(PT<WindowFramework> window)
 
   globe_view_.getPath().reparent_to(window_->get_render());
   globe_view_.getPath().set_scale(kGlobeScale);
+
+  // Create the collection of cities, and place them.
+  cities_.reserve(kDefaultCities.size());
+  for (std::vector<CityStaticData>::size_type i = 0; i < kDefaultCities.size();
+       i++) {
+    const CityStaticData &city_static_data = kDefaultCities[i];
+    PN_stdfloat height =
+        globe_.getHeightAtPoint(city_static_data.getLocation());
+    City city(city_static_data, i, height);
+    cities_.push_back(std::move(city));
+  }
+  city_views_.reserve(cities_.size());
+  for (std::vector<City>::size_type i = 0; i < cities_.size(); i++) {
+    const City &city = cities_[i];
+    CityView city_view(window_, city);
+    city_view.getPath().reparent_to(globe_view_.getPath());
+    city_view.getPath().set_tag(kTagCityId, std::to_string(i));
+    city_views_.push_back(std::move(city_view));
+  }
 
   boat_path_ = window_->load_model(framework_->get_models(),
                                    filename::forModel("boat/S_Boat.bam"));
@@ -213,16 +233,19 @@ AsyncTask::DoneStatus App::onUpdate(GenericAsyncTask *task) {
   collision_traverser_.traverse(window_->get_render());
   if (collision_handler_queue_->get_num_entries() > 0) {
     CollisionEntry *entry = collision_handler_queue_->get_entry(0);
-    NodePath boat_path = entry->get_from_node_path();
-    NodePath city_path = entry->get_into_node_path().get_parent();
-
-
-    const std::vector<CityView> &city_views = globe_view_.getCityViews();
-    for (const CityView& city_view : city_views) {
-      if (city_view.getPath() == city_path) {
-        City& city = city_view.getCity();
-        std::cout <<"in: " << city.getName() << std::endl;
-        break;
+    bool into_city =
+        entry->has_into() && entry->get_into_node_path().has_parent() &&
+        entry->get_into_node_path().get_parent().has_tag(kTagCityId);
+    if (into_city) {
+      std::vector<City>::size_type city_id = std::stoul(
+          entry->get_into_node_path().get_parent().get_tag(kTagCityId));
+      if (city_id < cities_.size()) {
+        City &city = cities_[city_id];
+        if (!city.getIsDiscovered()) {
+          city.setIsDiscovered(true);
+          CityView &city_view = city_views_[city_id];
+          city_view.rerender(city);
+        }
       }
     }
   }

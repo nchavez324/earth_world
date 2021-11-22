@@ -1,6 +1,10 @@
 #ifndef EARTH_WORLD_APP_H
 #define EARTH_WORLD_APP_H
 
+#include <vector>
+
+#include "city.h"
+#include "city_view.h"
 #include "globe.h"
 #include "globe_view.h"
 #include "minimap_view.h"
@@ -44,6 +48,10 @@ class App {
   Globe globe_;
   GlobeView globe_view_;
   MinimapView minimap_view_;
+
+  std::vector<City> cities_;
+  std::vector<CityView> city_views_;
+
   /**
    * The user's input, where the X axis is horizontal motion, the Y axis is
    * vertical motion, the Z axis is zoom level.

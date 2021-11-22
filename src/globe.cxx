@@ -5,6 +5,7 @@
 #include "panda3d/graphicsStateGuardian.h"
 #include "panda3d/nodePath.h"
 #include "panda3d/texturePool.h"
+#include "sphere_point.h"
 
 namespace earth_world {
 
@@ -18,36 +19,22 @@ Globe::Globe()
             loadTex("bathymetry", kMainTexSize, Texture::F_red),
             loadTex("land_mask", kMainTexSize, Texture::F_red),
             loadTex("albedo_1", kMainTexSize, Texture::F_rgb),
-            buildVisibilityTex(kVisibilityTexSize), kLandMaskCutoff,
-            kDefaultCities) {}
+            buildVisibilityTex(kVisibilityTexSize), kLandMaskCutoff) {}
 
 Globe::Globe(PT<Texture> topology_texture, PT<Texture> bathymetry_texture,
              PT<Texture> land_mask_texture, PT<Texture> albedo_texture,
-             PT<Texture> visibility_texture, PN_stdfloat land_mask_cutoff,
-             const std::vector<CityStaticData> &city_static_data)
+             PT<Texture> visibility_texture, PN_stdfloat land_mask_cutoff)
     : topology_texture_{topology_texture},
       bathymetry_texture_{bathymetry_texture},
       land_mask_texture_{land_mask_texture},
       albedo_texture_{albedo_texture},
       visibility_texture_{visibility_texture},
       visibility_compute_{"VisibilityCompute"},
-      land_mask_cutoff_{land_mask_cutoff},
-      cities_{} {
+      land_mask_cutoff_{land_mask_cutoff} {
   // Load the topology into the CPU for city placement.
   topology_texture->store(topology_image_);
   // Load the land mask into the CPU for collision detection.
   land_mask_texture->store(land_mask_image_);
-
-  // Create the collection of cities, and place them.
-  cities_.reserve(city_static_data.size());
-  for (auto i = city_static_data.begin(); i != city_static_data.end(); i++) {
-    LPoint2 uv = i->getLocation().toUV();
-    PN_stdfloat topology_sample = sampleImage(topology_image_, uv);
-    PN_stdfloat height = (topology_sample * (1.f - 0.95f)) + 0.95f;
-
-    City city(*i, height);
-    cities_.push_back(std::move(city));
-  }
 
   // Set up recurring shader to update visibility mask.
   PT<Shader> visibility_shader = Shader::load_compute(
@@ -68,14 +55,18 @@ PT<Texture> Globe::getVisibilityTexture() { return visibility_texture_; }
 
 PN_stdfloat Globe::getLandMaskCutoff() const { return land_mask_cutoff_; }
 
-std::vector<City> &Globe::getCities() { return cities_; }
-
-bool Globe::isLandAtPoint(const SpherePoint2 &point) {
+bool Globe::isLandAtPoint(const SpherePoint2 &point) const {
   if (!kEnableLandCollision) {
     return false;
   }
   PN_stdfloat land_mask_sample = sampleImage(land_mask_image_, point.toUV());
   return land_mask_sample <= land_mask_cutoff_;
+}
+
+PN_stdfloat Globe::getHeightAtPoint(const SpherePoint2& point) const {
+  LPoint2 uv = point.toUV();
+  PN_stdfloat topology_sample = sampleImage(topology_image_, uv);
+  return (topology_sample * (1.f - 0.95f)) + 0.95f;
 }
 
 void Globe::updateVisibility(GraphicsOutput *graphics_output,

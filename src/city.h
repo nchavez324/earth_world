@@ -11,7 +11,7 @@ namespace earth_world {
 /** Models a city on the globe. */
 class City {
  public:
-  City(const CityStaticData& city_static_data, PN_stdfloat height);
+  City(const CityStaticData& city_static_data, int id, PN_stdfloat height);
   City(const City&) = default;
   City(City&&) noexcept = default;
   City& operator=(const City&) = default;
@@ -20,11 +20,17 @@ class City {
 
   const std::string& getName() const;
   const std::string& getCountryName() const;
+  int getId() const;
+  bool getIsDiscovered() const;
   const SpherePoint3& getLocation() const;
   const LQuaternion& getRotation() const;
 
+  void setIsDiscovered(bool is_discovered);
+
  protected:
   CityStaticData city_static_data_;
+  int id_;
+  bool is_discovered_;
   SpherePoint3 location_;
   LQuaternion rotation_;
 };

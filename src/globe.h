@@ -1,12 +1,11 @@
 #ifndef EARTH_WORLD_GLOBE_H
 #define EARTH_WORLD_GLOBE_H
 
-#include "city.h"
-#include "city_static_data.h"
 #include "panda3d/aa_luse.h"
 #include "panda3d/graphicsOutput.h"
 #include "panda3d/pnmImage.h"
 #include "panda3d/texture.h"
+#include "sphere_point.h"
 #include "typedefs.h"
 
 namespace earth_world {
@@ -16,8 +15,7 @@ class Globe {
   Globe();
   Globe(PT<Texture> topology_texture, PT<Texture> bathymetry_texture,
         PT<Texture> land_mask_texture, PT<Texture> albedo_texture,
-        PT<Texture> visibility_texture, PN_stdfloat land_mask_cutoff,
-        const std::vector<CityStaticData>& city_static_data);
+        PT<Texture> visibility_texture, PN_stdfloat land_mask_cutoff);
   Globe(const Globe&) = delete;
   Globe(Globe&&) = delete;
   Globe& operator=(const Globe&) = delete;
@@ -30,14 +28,15 @@ class Globe {
   PT<Texture> getAlbedoTexture();
   PT<Texture> getVisibilityTexture();
   PN_stdfloat getLandMaskCutoff() const;
-  std::vector<City>& getCities();
 
   /**
    * Tests whether there is land at the given unit sphere point.
    * @param point The point to test.
    * @return True if the given point rests on land.
    */
-  bool isLandAtPoint(const SpherePoint2& point);
+  bool isLandAtPoint(const SpherePoint2& point) const;
+
+  PN_stdfloat getHeightAtPoint(const SpherePoint2& point) const;
 
   /**
    * Updates the visible area of the globe to include what would be visible at
@@ -60,7 +59,6 @@ class Globe {
 
   NodePath visibility_compute_;
   const PN_stdfloat land_mask_cutoff_;
-  std::vector<City> cities_;
 
   /**
    * Loads a texture with the given parameters, with filename
