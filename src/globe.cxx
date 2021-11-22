@@ -9,7 +9,7 @@
 
 namespace earth_world {
 
-const bool kEnableLandCollision = false;
+const bool kEnableLandCollision = true;
 const PN_stdfloat kLandMaskCutoff = 0.5f;
 const LVector2i kMainTexSize(16384, 8192);
 const LVector2i kVisibilityTexSize(2048, 1024);
@@ -66,7 +66,8 @@ bool Globe::isLandAtPoint(const SpherePoint2 &point) const {
 PN_stdfloat Globe::getHeightAtPoint(const SpherePoint2& point) const {
   LPoint2 uv = point.toUV();
   PN_stdfloat topology_sample = sampleImage(topology_image_, uv);
-  return (topology_sample * (1.f - 0.95f)) + 0.95f;
+  return (topology_sample * (1.f - kGlobeWaterSurfaceHeight)) +
+         kGlobeWaterSurfaceHeight;
 }
 
 void Globe::updateVisibility(GraphicsOutput *graphics_output,

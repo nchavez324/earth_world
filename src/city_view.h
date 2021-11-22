@@ -26,8 +26,6 @@ class CityView {
   int getCityId() const;
   NodePath getPath() const;
 
-  void rerender(const City& city);
-
  protected:
   int city_id_;
   NodePath path_;

@@ -21,16 +21,12 @@ class City {
   const std::string& getName() const;
   const std::string& getCountryName() const;
   int getId() const;
-  bool getIsDiscovered() const;
   const SpherePoint3& getLocation() const;
   const LQuaternion& getRotation() const;
-
-  void setIsDiscovered(bool is_discovered);
 
  protected:
   CityStaticData city_static_data_;
   int id_;
-  bool is_discovered_;
   SpherePoint3 location_;
   LQuaternion rotation_;
 };

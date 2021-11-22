@@ -28,9 +28,8 @@ const bool kEnableDebugAxes = false;
 const int kGlobeVerticesPerEdge = 100;
 const PN_stdfloat kAxesScale = 40.f;
 const PN_stdfloat kGlobeScale = 20.f;
-const PN_stdfloat kGlobeWaterSurfaceHeight = 0.95f;
 const PN_stdfloat kBoatScale = 0.05f;
-const PN_stdfloat kBoatSpeed = 0.3f;
+const PN_stdfloat kBoatSpeed = 0.07f;
 const PN_stdfloat kCameraDistanceMin = 7.f;
 const PN_stdfloat kCameraDistanceMax = 20.f;
 const PN_stdfloat kCameraZoomSpeed = 5.f;
@@ -87,7 +86,6 @@ App::App(PT<WindowFramework> window)
   PT<CollisionNode> boat_collider_node = new CollisionNode("BoatCollider");
   boat_collider_node->add_solid(boat_collider);
   boat_collider_path_ = boat_path_.attach_new_node(boat_collider_node);
-  boat_collider_path_.show();
   collision_traverser_.add_collider(boat_collider_path_,
                                     collision_handler_queue_);
 
@@ -241,11 +239,7 @@ AsyncTask::DoneStatus App::onUpdate(GenericAsyncTask *task) {
           entry->get_into_node_path().get_parent().get_tag(kTagCityId));
       if (city_id < cities_.size()) {
         City &city = cities_[city_id];
-        if (!city.getIsDiscovered()) {
-          city.setIsDiscovered(true);
-          CityView &city_view = city_views_[city_id];
-          city_view.rerender(city);
-        }
+        // TODO: Allow interaction with city 
       }
     }
   }

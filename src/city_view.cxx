@@ -48,7 +48,6 @@ CityView::CityView(PT<WindowFramework> window, const City &city)
   city_label->set_font(font);
 
   label_path_ = path_.attach_new_node(city_label);
-  label_path_.hide();
 
   // Offset the label a bit up and right of the city.
   SpherePoint3 label_offset_global =
@@ -95,13 +94,5 @@ CityView::~CityView() { path_.remove_node(); }
 NodePath CityView::getPath() const { return path_; }
 
 int CityView::getCityId() const { return city_id_; }
-
-void CityView::rerender(const City& city) {
-  if (city.getIsDiscovered()) {
-    label_path_.show();
-  } else {
-    label_path_.hide();
-  }
-}
 
 }  // namespace earth_world

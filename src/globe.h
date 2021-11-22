@@ -10,6 +10,8 @@
 
 namespace earth_world {
 
+const PN_stdfloat kGlobeWaterSurfaceHeight = 0.95f;
+
 class Globe {
  public:
   Globe();
