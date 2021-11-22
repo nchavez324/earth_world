@@ -39,7 +39,7 @@ LColor const kClearColor(0, 0, 0, 1);
 App::App(PT<WindowFramework> window)
     : framework_{window->get_panda_framework()},
       window_{window},
-      clock_{ClockObject::get_global_clock()},
+      collision_handler_queue_{new CollisionHandlerQueue},
       globe_view_{window, globe_, kGlobeVerticesPerEdge},
       minimap_view_{globe_},
       input_{0},
@@ -69,7 +69,7 @@ App::App(PT<WindowFramework> window)
   boat_collider_path_ = boat_path_.attach_new_node(boat_collider_node);
   boat_collider_path_.show();
   collision_traverser_.add_collider(boat_collider_path_,
-                                    &collision_handler_queue_);
+                                    collision_handler_queue_);
 
   camera_path_ = window_->get_camera_group();
   camera_path_.set_pos((kGlobeScale + camera_distance_) * LVector3::right());
@@ -77,14 +77,6 @@ App::App(PT<WindowFramework> window)
       quaternion::fromLookAt(LVector3::left(), LVector3::up()));
 
   minimap_view_.getPath().reparent_to(window->get_pixel_2d());
-
-  // const std::vector<CityView>&city_views = globe_view_.getCityViews();
-  // for (const CityView &city_view : city_views) {
-  //   collision_handler_pusher_.add_collider(city_view.getColliderPath(),
-  //                                          city_view.getPath());
-  //   collision_traverser_.add_collider(city_view.getColliderPath(),
-  //                                     &collision_handler_pusher_);
-  // }
 
   PT<GenericAsyncTask> update_task =
       new GenericAsyncTask("Update", &App::onUpdate, /* app= */ this);
@@ -102,9 +94,12 @@ App::App(PT<WindowFramework> window)
 }
 
 App::~App() {
-  globe_view_.getPath().remove_node();
+  framework_->get_task_mgr().remove_task_chain("Update");
+  minimap_view_.getPath().remove_node();
   camera_path_.remove_node();
+  collision_traverser_.remove_collider(boat_collider_path_);
   boat_path_.remove_node();
+  globe_view_.getPath().remove_node();
 }
 
 int App::run() {
@@ -140,11 +135,16 @@ void App::onInputChange(LVector3 input_delta) {
 }
 
 AsyncTask::DoneStatus App::onUpdate(GenericAsyncTask *task) {
-  if (window_.is_null() || clock_.is_null()) {
+  ClockObject *clock = ClockObject::get_global_clock();
+  if (window_.is_null() || clock == nullptr) {
     return AsyncTask::DS_exit;
   }
-  PT<GraphicsWindow> graphics_window = window_->get_graphics_window();
-  if (graphics_window.is_null()) {
+  GraphicsWindow *graphics_window = window_->get_graphics_window();
+  if (graphics_window == nullptr) {
+    return AsyncTask::DS_exit;
+  }
+  GraphicsOutput *graphics_output = window_->get_graphics_output();
+  if (graphics_output == nullptr) {
     return AsyncTask::DS_exit;
   }
 
@@ -163,7 +163,7 @@ AsyncTask::DoneStatus App::onUpdate(GenericAsyncTask *task) {
   LVector3 heading =
       (camera_right * input_.get_x()) + (camera_up * input_.get_y());
   heading.normalize();
-  LVector3 position_delta = heading * kBoatSpeed * clock_->get_dt();
+  LVector3 position_delta = heading * kBoatSpeed * clock->get_dt();
 
   // 2. Update the boat's position in cartesian space and snap onto sphere.
   LVector3 old_boat_unit_position = boat_unit_sphere_position_.toCartesian();
@@ -188,8 +188,7 @@ AsyncTask::DoneStatus App::onUpdate(GenericAsyncTask *task) {
   }
 
   // 4. Update the visible portion of the globe.
-  globe_.updateVisibility(window_->get_graphics_output(),
-                          boat_unit_sphere_position_);
+  globe_.updateVisibility(graphics_output, boat_unit_sphere_position_);
 
   // 5. Update the heading if the input was non zero.
   if (!IS_NEARLY_ZERO(input_.get_x()) || !IS_NEARLY_ZERO(input_.get_y())) {
@@ -212,8 +211,8 @@ AsyncTask::DoneStatus App::onUpdate(GenericAsyncTask *task) {
   boat_path_.set_quat(new_boat_rotation);
 
   collision_traverser_.traverse(window_->get_render());
-  if (collision_handler_queue_.get_num_entries() > 0) {
-    CollisionEntry *entry = collision_handler_queue_.get_entry(0);
+  if (collision_handler_queue_->get_num_entries() > 0) {
+    CollisionEntry *entry = collision_handler_queue_->get_entry(0);
     NodePath boat_path = entry->get_from_node_path();
     NodePath city_path = entry->get_into_node_path().get_parent();
 
@@ -230,7 +229,7 @@ AsyncTask::DoneStatus App::onUpdate(GenericAsyncTask *task) {
 
   // 7. Update the camera distance.
   PN_stdfloat camera_distance_delta =
-      input_.get_z() * clock_->get_dt() * kCameraZoomSpeed;
+      input_.get_z() * clock->get_dt() * kCameraZoomSpeed;
   camera_distance_ = std::max(
       kCameraDistanceMin,
       std::min(kCameraDistanceMax, camera_distance_ + camera_distance_delta));

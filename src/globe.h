@@ -45,7 +45,7 @@ class Globe {
    * @param graphics_output The graphics output to run compute shaders on.
    * @param player_position The unit sphere position the player is currently at.
    */
-  void updateVisibility(PT<GraphicsOutput> graphics_output,
+  void updateVisibility(GraphicsOutput* graphics_output,
                         const SpherePoint2& player_position);
 
  protected:

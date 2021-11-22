@@ -78,8 +78,17 @@ bool Globe::isLandAtPoint(const SpherePoint2 &point) {
   return land_mask_sample <= land_mask_cutoff_;
 }
 
-void Globe::updateVisibility(PT<GraphicsOutput> graphics_output,
+void Globe::updateVisibility(GraphicsOutput *graphics_output,
                              const SpherePoint2 &player_position) {
+  if (graphics_output == nullptr) {
+    return;
+  }
+  GraphicsEngine *engine = graphics_output->get_engine();
+  GraphicsStateGuardian *state_guardian = graphics_output->get_gsg();
+  if (engine == nullptr || state_guardian == nullptr) {
+    return;
+  }
+
   SpherePoint3 coords = player_position.toRadial();
   visibility_compute_.set_shader_input("u_PlayerSphericalCoords", coords);
   CPT<ShaderAttrib> attributes =
@@ -87,8 +96,6 @@ void Globe::updateVisibility(PT<GraphicsOutput> graphics_output,
             visibility_compute_.get_attrib(ShaderAttrib::get_class_type()));
   LVector3i work_groups(2048 / 16, 1024 / 16, 1);
 
-  PT<GraphicsEngine> engine = graphics_output->get_engine();
-  PT<GraphicsStateGuardian> state_guardian = graphics_output->get_gsg();
   engine->dispatch_compute(work_groups, attributes, state_guardian);
 }
 

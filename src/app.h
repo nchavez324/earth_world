@@ -38,9 +38,8 @@ class App {
  protected:
   PandaFramework *framework_;
   PT<WindowFramework> window_;
-  PT<ClockObject> clock_;
   CollisionTraverser collision_traverser_;
-  CollisionHandlerQueue collision_handler_queue_;
+  PT<CollisionHandlerQueue> collision_handler_queue_;
 
   Globe globe_;
   GlobeView globe_view_;
