@@ -50,22 +50,24 @@ GlobeView::GlobeView(PT<GraphicsOutput> graphics_output, Globe& globe,
   PT<Shader> material_shader =
       Shader::load(Shader::SL_GLSL, filename::forShader("globe.vert"),
                    filename::forShader("globe.frag"));
-  NodePath mesh_path = buildGeometry(graphics_output, globe, vertices_per_edge);
-  mesh_path.set_shader(material_shader);
-  mesh_path.set_shader_input("u_LandMaskCutoff",
+  mesh_path_ = buildGeometry(graphics_output, globe, vertices_per_edge);
+  mesh_path_.set_shader(material_shader);
+  mesh_path_.set_shader_input("u_LandMaskCutoff",
                              LVector2(globe.getLandMaskCutoff(), 0));
-  setTextureStage(mesh_path, globe.getTopologyTexture(), /* prio= */ 0);
-  setTextureStage(mesh_path, globe.getBathymetryTexture(), /* prio= */ 1);
-  setTextureStage(mesh_path, globe.getLandMaskTexture(), /* prio= */ 2);
-  setTextureStage(mesh_path, globe.getAlbedoTexture(), /* prio= */ 3);
-  setTextureStage(mesh_path, globe.getNormalTexture(), /* prio= */ 4);
-  setTextureStage(mesh_path, globe.getVisibilityTexture(), /* prio= */ 5);
-  setTextureStage(mesh_path, incognita_texture, /* prio= */ 6);
-  mesh_path.reparent_to(path_);
+  setTextureStage(mesh_path_, globe.getTopologyTexture(), /* prio= */ 0);
+  setTextureStage(mesh_path_, globe.getBathymetryTexture(), /* prio= */ 1);
+  setTextureStage(mesh_path_, globe.getLandMaskTexture(), /* prio= */ 2);
+  setTextureStage(mesh_path_, globe.getAlbedoTexture(), /* prio= */ 3);
+  setTextureStage(mesh_path_, globe.getNormalTexture(), /* prio= */ 4);
+  setTextureStage(mesh_path_, globe.getVisibilityTexture(), /* prio= */ 5);
+  setTextureStage(mesh_path_, incognita_texture, /* prio= */ 6);
+  mesh_path_.reparent_to(path_);
 }
 
-GlobeView::GlobeView(GlobeView&& other) noexcept : path_{other.path_} {
+GlobeView::GlobeView(GlobeView&& other) noexcept
+    : path_{other.path_}, mesh_path_{other.mesh_path_} {
   other.path_.clear();
+  other.mesh_path_.clear();
 }
 
 GlobeView& GlobeView::operator=(GlobeView&& other) noexcept {
@@ -74,13 +76,17 @@ GlobeView& GlobeView::operator=(GlobeView&& other) noexcept {
   }
   path_.remove_node();
   path_ = other.path_;
+  mesh_path_ = other.mesh_path_;
   other.path_.clear();
+  other.mesh_path_.clear();
   return *this;
 }
 
 GlobeView::~GlobeView() { path_.remove_node(); }
 
 NodePath GlobeView::getPath() const { return path_; }
+
+NodePath GlobeView::getMeshPath() const { return mesh_path_; }
 
 NodePath GlobeView::buildGeometry(PT<GraphicsOutput> graphics_output,
                                   Globe& globe, int vertices_per_edge) {

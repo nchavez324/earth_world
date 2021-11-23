@@ -33,9 +33,11 @@ class GlobeView {
   ~GlobeView();
 
   NodePath getPath() const;
+  NodePath getMeshPath() const;
 
  protected:
   NodePath path_;
+  NodePath mesh_path_;
 
   /** Helper function to build a node containing the globe's geometry. */
   static NodePath buildGeometry(PT<GraphicsOutput> graphics_output,

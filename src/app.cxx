@@ -71,8 +71,8 @@ App::App(PT<WindowFramework> window)
 
   globe_view_.getPath().reparent_to(window_->get_render());
   globe_view_.getPath().set_scale(kGlobeScale);
-  globe_view_.getPath().set_light(directional_light_path);
-  globe_view_.getPath().set_light(ambient_light_path);
+  globe_view_.getMeshPath().set_light(directional_light_path);
+  globe_view_.getMeshPath().set_light(ambient_light_path);
 
   // Create the collection of cities, and place them.
   cities_.reserve(kDefaultCities.size());
