@@ -29,8 +29,10 @@ class CityView {
  protected:
   int city_id_;
   NodePath path_;
-  NodePath model_path_;
+  NodePath icon_path_;
   NodePath label_path_;
+
+  static NodePath buildIconNode();
 };
 
 }  // namespace earth_world

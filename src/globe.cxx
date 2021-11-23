@@ -14,6 +14,7 @@ const PN_stdfloat kLandMaskCutoff = 0.5f;
 const LVector2i kMainTexSize(16384, 8192);
 const LVector2i kNormalTexSize(16384, 8192);
 const LVector2i kVisibilityTexSize(2048, 1024);
+const LColor kVisibilityClearColor(0);
 
 Globe::Globe(GraphicsOutput *graphics_output)
     : Globe(graphics_output, loadTex("topology", kMainTexSize, Texture::F_red),
@@ -145,8 +146,7 @@ PT<Texture> Globe::buildVisibilityTex(const LVector2i &texture_size) {
   visibility_texture->setup_2d_texture(texture_size.get_x(),
                                        texture_size.get_y(), Texture::T_float,
                                        Texture::F_rg16);
-  LColor clear_color(0, 0, 0, 0);
-  visibility_texture->set_clear_color(clear_color);
+  visibility_texture->set_clear_color(kVisibilityClearColor);
   visibility_texture->set_wrap_u(SamplerState::WM_repeat);
   return visibility_texture;
 }

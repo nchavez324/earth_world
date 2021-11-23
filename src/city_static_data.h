@@ -29,20 +29,7 @@ class CityStaticData {
 };
 
 /** A list of default cities on earth to display. */
-const std::vector<CityStaticData> kDefaultCities = {
-    CityStaticData(
-        "New York", "USA",
-        SpherePoint2::fromLatitudeAndLongitude(40.712776f, -74.005974)),
-    CityStaticData(
-        "Bogota", "Colombia",
-        SpherePoint2::fromLatitudeAndLongitude(4.710989f, -74.072090f)),
-    CityStaticData(
-        "Honolulu", "USA",
-        SpherePoint2::fromLatitudeAndLongitude(21.309919f, -157.858154f)),
-    CityStaticData(
-        "Lisbon", "Portugal",
-        SpherePoint2::fromLatitudeAndLongitude(38.685108f, -9.238115f)),
-};
+extern std::vector<CityStaticData> kDefaultCities;
 
 }  // namespace earth_world
 
