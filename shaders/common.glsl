@@ -42,6 +42,11 @@ vec3 cartesianCoordsFromSpherical(vec3 coords) {
     coords.z * sin(coords.y));
 }
 
+vec3 cartesianFromSphericalUV(vec2 uv) {
+  vec3 sphericalCoords = vec3(uv.x * TWO_PI, (uv.y * PI) - PI_OVER_TWO, 1);
+  return cartesianCoordsFromSpherical(sphericalCoords);
+}
+
 /** This assumes both are normalized, radius 1. */
 float unitSphereDistance(vec2 s1, vec2 s2) {
   // Find the angle between the two, when in cartesian.
@@ -57,4 +62,10 @@ float unitSphereDistance(vec2 s1, vec2 s2) {
 
 float inverseMix(float from, float to, float value) {
   return clamp((value - from) / (to - from), 0, 1);
+}
+
+vec3 calculateLightViewDirection(vec3 fragmentViewPosition,
+                                 vec4 lightViewPosition) {
+  return normalize(lightViewPosition.xyz -
+                   (fragmentViewPosition * lightViewPosition.w));
 }

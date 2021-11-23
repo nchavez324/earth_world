@@ -58,8 +58,9 @@ GlobeView::GlobeView(PT<GraphicsOutput> graphics_output, Globe& globe,
   setTextureStage(mesh_path, globe.getBathymetryTexture(), /* prio= */ 1);
   setTextureStage(mesh_path, globe.getLandMaskTexture(), /* prio= */ 2);
   setTextureStage(mesh_path, globe.getAlbedoTexture(), /* prio= */ 3);
-  setTextureStage(mesh_path, globe.getVisibilityTexture(), /* prio= */ 4);
-  setTextureStage(mesh_path, incognita_texture, /* prio= */ 5);
+  setTextureStage(mesh_path, globe.getNormalTexture(), /* prio= */ 4);
+  setTextureStage(mesh_path, globe.getVisibilityTexture(), /* prio= */ 5);
+  setTextureStage(mesh_path, incognita_texture, /* prio= */ 6);
   mesh_path.reparent_to(path_);
 }
 

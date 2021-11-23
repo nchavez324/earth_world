@@ -12,22 +12,27 @@ namespace earth_world {
 const bool kEnableLandCollision = true;
 const PN_stdfloat kLandMaskCutoff = 0.5f;
 const LVector2i kMainTexSize(16384, 8192);
+const LVector2i kNormalTexSize(8192, 4096);
 const LVector2i kVisibilityTexSize(2048, 1024);
 
-Globe::Globe()
-    : Globe(loadTex("topology", kMainTexSize, Texture::F_red),
+Globe::Globe(GraphicsOutput *graphics_output)
+    : Globe(graphics_output, loadTex("topology", kMainTexSize, Texture::F_red),
             loadTex("bathymetry", kMainTexSize, Texture::F_red),
             loadTex("land_mask", kMainTexSize, Texture::F_red),
             loadTex("albedo_1", kMainTexSize, Texture::F_rgb),
             buildVisibilityTex(kVisibilityTexSize), kLandMaskCutoff) {}
 
-Globe::Globe(PT<Texture> topology_texture, PT<Texture> bathymetry_texture,
-             PT<Texture> land_mask_texture, PT<Texture> albedo_texture,
-             PT<Texture> visibility_texture, PN_stdfloat land_mask_cutoff)
+Globe::Globe(GraphicsOutput *graphics_output, PT<Texture> topology_texture,
+             PT<Texture> bathymetry_texture, PT<Texture> land_mask_texture,
+             PT<Texture> albedo_texture, PT<Texture> visibility_texture,
+             PN_stdfloat land_mask_cutoff)
     : topology_texture_{topology_texture},
       bathymetry_texture_{bathymetry_texture},
       land_mask_texture_{land_mask_texture},
       albedo_texture_{albedo_texture},
+      normal_texture_{buildNormalTex(graphics_output, topology_texture,
+                                     bathymetry_texture, land_mask_texture,
+                                     land_mask_cutoff)},
       visibility_texture_{visibility_texture},
       visibility_compute_{"VisibilityCompute"},
       land_mask_cutoff_{land_mask_cutoff} {
@@ -51,6 +56,8 @@ PT<Texture> Globe::getLandMaskTexture() { return land_mask_texture_; }
 
 PT<Texture> Globe::getAlbedoTexture() { return albedo_texture_; }
 
+PT<Texture> Globe::getNormalTexture() { return normal_texture_; }
+
 PT<Texture> Globe::getVisibilityTexture() { return visibility_texture_; }
 
 PN_stdfloat Globe::getLandMaskCutoff() const { return land_mask_cutoff_; }
@@ -63,7 +70,7 @@ bool Globe::isLandAtPoint(const SpherePoint2 &point) const {
   return land_mask_sample <= land_mask_cutoff_;
 }
 
-PN_stdfloat Globe::getHeightAtPoint(const SpherePoint2& point) const {
+PN_stdfloat Globe::getHeightAtPoint(const SpherePoint2 &point) const {
   LPoint2 uv = point.toUV();
   PN_stdfloat topology_sample = sampleImage(topology_image_, uv);
   return (topology_sample * (1.f - kGlobeWaterSurfaceHeight)) +
@@ -142,6 +149,41 @@ PT<Texture> Globe::buildVisibilityTex(const LVector2i &texture_size) {
   visibility_texture->set_clear_color(clear_color);
   visibility_texture->set_wrap_u(SamplerState::WM_repeat);
   return visibility_texture;
+}
+
+PT<Texture> Globe::buildNormalTex(GraphicsOutput *graphics_output,
+                                  PT<Texture> topology_texture,
+                                  PT<Texture> bathymetry_texture,
+                                  PT<Texture> land_mask_texture,
+                                  PN_stdfloat land_mask_cutoff) {
+  // Store x,y,z in the r,g,b channels.
+  PT<Texture> normal_texture = new Texture("NormalTexture");
+  normal_texture->setup_2d_texture(kNormalTexSize.get_x(), kNormalTexSize.get_y(),
+                                   Texture::T_float, Texture::F_rgba);
+  LColor clear_color(0, 0, 0, 0);
+  normal_texture->set_clear_color(clear_color);
+  normal_texture->set_wrap_u(SamplerState::WM_repeat);
+
+  // Run one off calculate normals compute shader.
+  PT<Shader> shader = Shader::load_compute(
+      Shader::SL_GLSL, filename::forShader("calculateNormals.comp"));
+  NodePath compute_path("CalculateNormalsCompute");
+  compute_path.set_shader(shader);
+  compute_path.set_shader_input("u_LandMaskCutoff",
+                                LVector2(land_mask_cutoff, 0));
+  compute_path.set_shader_input("u_TopologyTex", topology_texture);
+  compute_path.set_shader_input("u_BathymetryTex", bathymetry_texture);
+  compute_path.set_shader_input("u_LandMaskTex", land_mask_texture);
+  compute_path.set_shader_input("u_NormalTex", normal_texture);
+  CPT<ShaderAttrib> attributes = DCAST(
+      ShaderAttrib, compute_path.get_attrib(ShaderAttrib::get_class_type()));
+  LVector3i work_groups(
+      static_cast<int>(std::ceil(kNormalTexSize.get_x() / 16.0)),
+      static_cast<int>(std::ceil(kNormalTexSize.get_y() / 16.0)), 1);
+  GraphicsEngine *engine = graphics_output->get_engine();
+  GraphicsStateGuardian *state_guardian = graphics_output->get_gsg();
+  engine->dispatch_compute(work_groups, attributes, state_guardian);
+  return normal_texture;
 }
 
 PN_stdfloat Globe::sampleImage(const PNMImage &image, const LPoint2 &uv) {

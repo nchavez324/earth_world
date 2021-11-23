@@ -14,10 +14,11 @@ const PN_stdfloat kGlobeWaterSurfaceHeight = 0.95f;
 
 class Globe {
  public:
-  Globe();
-  Globe(PT<Texture> topology_texture, PT<Texture> bathymetry_texture,
-        PT<Texture> land_mask_texture, PT<Texture> albedo_texture,
-        PT<Texture> visibility_texture, PN_stdfloat land_mask_cutoff);
+  explicit Globe(GraphicsOutput* graphics_output);
+  Globe(GraphicsOutput* graphics_output, PT<Texture> topology_texture,
+        PT<Texture> bathymetry_texture, PT<Texture> land_mask_texture,
+        PT<Texture> albedo_texture, PT<Texture> visibility_texture,
+        PN_stdfloat land_mask_cutoff);
   Globe(const Globe&) = delete;
   Globe(Globe&&) = delete;
   Globe& operator=(const Globe&) = delete;
@@ -28,6 +29,7 @@ class Globe {
   PT<Texture> getBathymetryTexture();
   PT<Texture> getLandMaskTexture();
   PT<Texture> getAlbedoTexture();
+  PT<Texture> getNormalTexture();
   PT<Texture> getVisibilityTexture();
   PN_stdfloat getLandMaskCutoff() const;
 
@@ -54,6 +56,7 @@ class Globe {
   PT<Texture> bathymetry_texture_;
   PT<Texture> land_mask_texture_;
   PT<Texture> albedo_texture_;
+  PT<Texture> normal_texture_;
   PT<Texture> visibility_texture_;
 
   PNMImage topology_image_;
@@ -77,6 +80,13 @@ class Globe {
 
   /** Creates the texture used for keeping track of what's visible. */
   static PT<Texture> buildVisibilityTex(const LVector2i& texture_size);
+
+  /** Creates the normal map texture based on the height maps. */
+  static PT<Texture> buildNormalTex(GraphicsOutput* graphics_output,
+                                    PT<Texture> topology_texture,
+                                    PT<Texture> bathymetry_texture,
+                                    PT<Texture> land_mask_texture,
+                                    PN_stdfloat land_mask_cutoff);
 
   /** Samples the intensity of the image at the given point. */
   static PN_stdfloat sampleImage(const PNMImage& image, const LPoint2& uv);

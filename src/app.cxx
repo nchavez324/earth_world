@@ -3,13 +3,15 @@
 #include "debug_axes.h"
 #include "filename.h"
 #include "globe.h"
+#include "panda3d/ambientLight.h"
 #include "panda3d/asyncTaskManager.h"
 #include "panda3d/boundingBox.h"
 #include "panda3d/clockObject.h"
-#include "panda3d/computeNode.h"
-#include "panda3d/geomLines.h"
-#include "panda3d/collisionSphere.h"
 #include "panda3d/collisionNode.h"
+#include "panda3d/collisionSphere.h"
+#include "panda3d/computeNode.h"
+#include "panda3d/directionalLight.h"
+#include "panda3d/geomLines.h"
 #include "panda3d/geomTriangles.h"
 #include "panda3d/graphicsPipe.h"
 #include "panda3d/mouseAndKeyboard.h"
@@ -40,6 +42,7 @@ App::App(PT<WindowFramework> window)
     : framework_{window->get_panda_framework()},
       window_{window},
       collision_handler_queue_{new CollisionHandlerQueue},
+      globe_{window->get_graphics_output()},
       globe_view_{window->get_graphics_output(), globe_, kGlobeVerticesPerEdge},
       minimap_view_{globe_},
       input_{0},
@@ -55,8 +58,21 @@ App::App(PT<WindowFramework> window)
     axes.set_scale(kAxesScale);
   }
 
+  PT<DirectionalLight> directional_light =
+      new DirectionalLight("DirectionalLight");
+  directional_light->set_color(LColor(1, 0.89f, 0.64f, 1));
+  NodePath directional_light_path =
+      window->get_render().attach_new_node(directional_light);
+
+  PT<AmbientLight> ambient_light = new AmbientLight("AmbientLight");
+  ambient_light->set_color(LColor(0.5f, 0.5, 0.5, 1));
+  NodePath ambient_light_path =
+      window->get_render().attach_new_node(ambient_light);
+
   globe_view_.getPath().reparent_to(window_->get_render());
   globe_view_.getPath().set_scale(kGlobeScale);
+  globe_view_.getPath().set_light(directional_light_path);
+  globe_view_.getPath().set_light(ambient_light_path);
 
   // Create the collection of cities, and place them.
   cities_.reserve(kDefaultCities.size());
@@ -81,6 +97,10 @@ App::App(PT<WindowFramework> window)
                                    filename::forModel("boat/S_Boat.bam"));
   boat_path_.reparent_to(window_->get_render());
   boat_path_.set_scale(kBoatScale);
+
+  directional_light_path.reparent_to(boat_path_);
+  directional_light_path.set_quat(
+      quaternion::fromLookAt(LVector3::down(), LVector3::forward()));
 
   PT<CollisionSphere> boat_collider = new CollisionSphere(0, 0, 0, 3);
   PT<CollisionNode> boat_collider_node = new CollisionNode("BoatCollider");
@@ -239,7 +259,7 @@ AsyncTask::DoneStatus App::onUpdate(GenericAsyncTask *task) {
           entry->get_into_node_path().get_parent().get_tag(kTagCityId));
       if (city_id < cities_.size()) {
         City &city = cities_[city_id];
-        // TODO: Allow interaction with city 
+        // TODO: Allow interaction with city
       }
     }
   }

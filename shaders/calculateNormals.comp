@@ -1,0 +1,54 @@
+#version 430
+
+#pragma include "common.glsl"
+
+layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+uniform sampler2D u_TopologyTex;
+uniform sampler2D u_BathymetryTex;
+uniform sampler2D u_LandMaskTex;
+uniform layout(rgba16f) image2D u_NormalTex;
+
+vec2 uvFromPixel(ivec2 texSize, ivec2 pixel) {
+  pixel = ivec2(pixel.x % texSize.x, clamp(pixel.y, 0, texSize.y - 1));
+  return vec2((pixel.x + 0.5) / texSize.x, (pixel.y + 0.5) / texSize.y);
+}
+
+vec3 worldPositionAtPixel(ivec2 texSize, ivec2 pixel) {
+  vec2 uv = uvFromPixel(texSize, pixel);
+  vec3 unitSphereCartesian = cartesianFromSphericalUV(uv);
+
+  float landMask = texture(u_LandMaskTex, uv).r;
+  float magnitude = 1;
+  if (landMask > u_LandMaskCutoff) {  
+    float bathymetry = texture(u_BathymetryTex, uv).r;
+    float waterDepth = 1 - bathymetry;
+    magnitude = mix(0.95, 0.94, waterDepth);
+  } else {
+    float topology = texture(u_TopologyTex, uv).r;
+    magnitude = mix(0.95, 1, topology);
+  }
+  return unitSphereCartesian * magnitude;
+}
+
+void main() {
+  ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
+  ivec2 texSize = imageSize(u_NormalTex);
+  if (pixel.x >= texSize.x || pixel.y >= texSize.y) {
+    return;
+  }
+
+  vec3 worldPosN = worldPositionAtPixel(texSize, pixel + ivec2(0, +1)).rgb;
+  vec3 worldPosS = worldPositionAtPixel(texSize, pixel + ivec2(0, -1)).rgb;
+  vec3 worldPosE = worldPositionAtPixel(texSize, pixel + ivec2(+1, 0)).rgb;
+  vec3 worldPosW = worldPositionAtPixel(texSize, pixel + ivec2(-1, 0)).rgb;
+
+  // Take W-E as X, S-N as Y, cross them to get the normal, Z
+  vec3 gradientX = normalize(worldPosE - worldPosW);
+  vec3 gradientY = normalize(worldPosN - worldPosS);
+  vec3 normal = normalize(cross(gradientX, gradientY));
+
+  vec4 newColor = vec4(normal, 1);
+
+  imageStore(u_NormalTex, pixel, newColor);
+}
