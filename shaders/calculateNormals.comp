@@ -7,7 +7,7 @@ layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 uniform sampler2D u_TopologyTex;
 uniform sampler2D u_BathymetryTex;
 uniform sampler2D u_LandMaskTex;
-uniform layout(rgba16f) image2D u_NormalTex;
+uniform layout(r11f_g11f_b10f) image2D u_NormalTex;
 
 vec2 uvFromPixel(ivec2 texSize, ivec2 pixel) {
   pixel = ivec2(pixel.x % texSize.x, clamp(pixel.y, 0, texSize.y - 1));

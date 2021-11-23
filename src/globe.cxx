@@ -12,7 +12,7 @@ namespace earth_world {
 const bool kEnableLandCollision = true;
 const PN_stdfloat kLandMaskCutoff = 0.5f;
 const LVector2i kMainTexSize(16384, 8192);
-const LVector2i kNormalTexSize(8192, 4096);
+const LVector2i kNormalTexSize(16384, 8192);
 const LVector2i kVisibilityTexSize(2048, 1024);
 
 Globe::Globe(GraphicsOutput *graphics_output)
@@ -158,8 +158,9 @@ PT<Texture> Globe::buildNormalTex(GraphicsOutput *graphics_output,
                                   PN_stdfloat land_mask_cutoff) {
   // Store x,y,z in the r,g,b channels.
   PT<Texture> normal_texture = new Texture("NormalTexture");
-  normal_texture->setup_2d_texture(kNormalTexSize.get_x(), kNormalTexSize.get_y(),
-                                   Texture::T_float, Texture::F_rgba);
+  normal_texture->setup_2d_texture(kNormalTexSize.get_x(),
+                                   kNormalTexSize.get_y(), Texture::T_float,
+                                   Texture::F_r11_g11_b10);
   LColor clear_color(0, 0, 0, 0);
   normal_texture->set_clear_color(clear_color);
   normal_texture->set_wrap_u(SamplerState::WM_repeat);
